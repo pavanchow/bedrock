@@ -1,0 +1,18 @@
+[package]
+name = "bedrock"
+version = "0.1.0"
+edition = "2021"
+description = "A from-scratch virtual CPU, assembler, and a kernel written in its own assembly."
+license = "MIT"
+repository = "https://github.com/pavanchow/bedrock"
+
+[[bin]]
+name = "bedrock"
+path = "src/bin/bedrock.rs"
+
+[lib]
+name = "bedrock"
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 3
