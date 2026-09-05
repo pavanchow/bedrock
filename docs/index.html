@@ -1,12 +1,1318 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>bedrock</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bedrock — interactive CPU &amp; kernel playground</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-2: #fbfbfd;
+    --text: #1d1d1f;
+    --text-dim: #6e6e73;
+    --border: #d2d2d7;
+    --accent: #0071e3;
+    --accent-soft: #e8f2ff;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    --taskA: #0071e3;
+    --taskA-soft: #d9ecff;
+    --taskB: #34c759;
+    --taskB-soft: #d6f5df;
+    --kernel: #8e8e93;
+    --kernel-soft: #e9e9eb;
+    --warn: #ff9f0a;
+    --danger: #ff3b30;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.05);
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  /* Dark theme. MUST come after the base body{} rule and re-declare both the
+     variables and the body background/color, or dark Chrome shows dark text on
+     a white page. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --panel: #1c1c1e;
+      --panel-2: #161618;
+      --text: #f5f5f7;
+      --text-dim: #98989d;
+      --border: #38383a;
+      --accent: #0a84ff;
+      --accent-soft: #0a2540;
+      --taskA: #0a84ff;
+      --taskA-soft: #0a2a4a;
+      --taskB: #30d158;
+      --taskB-soft: #0f2e18;
+      --kernel: #8e8e93;
+      --kernel-soft: #2c2c2e;
+      --warn: #ffd60a;
+      --danger: #ff453a;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5);
+    }
+    body { background: var(--bg); color: var(--text); }
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  header.hero { text-align: center; margin-bottom: 36px; }
+  header.hero h1 {
+    font-size: 44px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px;
+  }
+  header.hero p.tag { font-size: 20px; color: var(--text-dim); margin: 0 0 16px; font-weight: 400; }
+  header.hero a.repo {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--accent); text-decoration: none; font-size: 15px; font-weight: 500;
+    padding: 7px 15px; border: 1px solid var(--border); border-radius: 980px; background: var(--panel);
+  }
+  header.hero a.repo:hover { background: var(--accent-soft); }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 22px; margin-bottom: 22px;
+  }
+  .card h2 { font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px; }
+  .card h2 .sub { font-size: 14px; color: var(--text-dim); font-weight: 400; margin-left: 8px; }
+  .card p.lead { color: var(--text-dim); margin: 0 0 16px; font-size: 15px; }
+
+  /* How to use */
+  details.howto summary {
+    cursor: pointer; font-size: 21px; font-weight: 600; letter-spacing: -0.01em;
+    list-style: none; outline: none; user-select: none;
+  }
+  details.howto summary::-webkit-details-marker { display: none; }
+  details.howto summary::before { content: "▸ "; color: var(--accent); }
+  details.howto[open] summary::before { content: "▾ "; }
+  .howto-body { margin-top: 16px; }
+  .howto-body h3 { font-size: 16px; margin: 18px 0 6px; }
+  .howto-body ol, .howto-body ul { margin: 6px 0 12px; padding-left: 22px; }
+  .howto-body li { margin: 5px 0; font-size: 15px; }
+  .howto-body code, code.inl {
+    font-family: var(--mono); font-size: 13px; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px;
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; }
+  .legend .item { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--text-dim); }
+  .swatch { width: 16px; height: 16px; border-radius: 5px; display: inline-block; border: 1px solid var(--border); }
+
+  /* Controls */
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button.btn {
+    font-family: var(--sans); font-size: 15px; font-weight: 500;
+    padding: 9px 18px; border-radius: 980px; border: 1px solid transparent;
+    background: var(--accent); color: #fff; cursor: pointer; transition: opacity .15s;
+  }
+  button.btn:hover { opacity: .88; }
+  button.btn.secondary { background: var(--panel-2); color: var(--text); border-color: var(--border); }
+  button.btn:disabled { opacity: .4; cursor: not-allowed; }
+  .controls .spacer { flex: 1; }
+  .controls label { font-size: 14px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+  .controls input[type=range] { accent-color: var(--accent); }
+  .status-pill {
+    font-family: var(--mono); font-size: 13px; padding: 5px 12px; border-radius: 980px;
+    background: var(--panel-2); border: 1px solid var(--border);
+  }
+
+  /* Grid layout of the machine view */
+  .grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .subcard { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  .subcard h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); font-weight: 600; }
+
+  /* Registers */
+  .regs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .reg { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: var(--mono); font-size: 13px; }
+  .reg .name { color: var(--text-dim); font-size: 11px; }
+  .reg .val { font-weight: 600; }
+  .reg.changed { background: var(--accent-soft); border-color: var(--accent); }
+
+  /* Flags + mode */
+  .flags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .flag { font-family: var(--mono); font-size: 12px; padding: 5px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel); color: var(--text-dim); }
+  .flag.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .modebadge { font-family: var(--mono); font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 980px; }
+  .modebadge.user { background: var(--taskA-soft); color: var(--taskA); border: 1px solid var(--taskA); }
+  .modebadge.kernel { background: var(--kernel-soft); color: var(--text); border: 1px solid var(--kernel); }
+
+  .kv { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kv .cell { font-family: var(--mono); font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .kv .cell .name { color: var(--text-dim); font-size: 11px; }
+  .kv .cell .val { font-weight: 600; }
+
+  /* Timer bar */
+  .timerbar { height: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 980px; overflow: hidden; margin-top: 6px; }
+  .timerbar > div { height: 100%; background: var(--warn); transition: width .05s linear; }
+
+  /* Source view */
+  .source { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+  .source .ln { display: flex; padding: 0 10px; white-space: pre; }
+  .source .ln .num { color: var(--text-dim); width: 34px; flex: 0 0 34px; text-align: right; padding-right: 12px; user-select: none; }
+  .source .ln .txt { flex: 1; }
+  .source .ln.cur { background: var(--accent-soft); }
+  .source .ln.cur .txt { font-weight: 700; color: var(--accent); }
+  .source .cmt { color: var(--text-dim); }
+  .source .lbl { color: var(--taskB); }
+  .source .dir { color: var(--warn); }
+  .source .mn { color: var(--accent); }
+
+  /* Memory hex */
+  .hex { font-family: var(--mono); font-size: 12px; line-height: 1.5; max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); padding: 8px 10px; white-space: pre; }
+  .hex .addr { color: var(--text-dim); }
+  .hex b.pc { background: var(--accent); color: #fff; border-radius: 3px; padding: 0 1px; }
+  .hex b.sp { background: var(--taskB); color: #fff; border-radius: 3px; padding: 0 1px; }
+
+  /* Console */
+  .console { font-family: var(--mono); font-size: 22px; letter-spacing: 3px; min-height: 40px; background: #000; color: #30d158; border-radius: 10px; padding: 12px 14px; word-break: break-all; }
+  @media (prefers-color-scheme: dark) { .console { background: #0a0a0a; } }
+
+  /* Current instruction */
+  .curinstr { font-family: var(--mono); font-size: 15px; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; }
+  .curinstr .a { color: var(--text-dim); font-size: 12px; }
+  .curinstr .txt { font-size: 18px; font-weight: 700; color: var(--accent); }
+
+  /* Vector table */
+  .vt { display: flex; flex-direction: column; gap: 6px; }
+  .vt .row { display: flex; gap: 10px; align-items: center; font-family: var(--mono); font-size: 12.5px; padding: 6px 8px; border-radius: 8px; background: var(--panel); border: 1px solid var(--border); }
+  .vt .row.hit { background: var(--warn); color: #000; border-color: var(--warn); }
+  .vt .row .idx { font-weight: 700; }
+
+  /* Timeline */
+  .timeline { display: flex; height: 46px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); }
+  .timeline .seg { flex: 1 0 2px; min-width: 1px; }
+  .tl-scroll { overflow-x: auto; }
+  .tl-wide { display: flex; height: 46px; }
+  .tl-wide .seg { width: 3px; flex: 0 0 3px; }
+
+  /* Event log */
+  .log { font-family: var(--mono); font-size: 12px; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); padding: 8px 10px; }
+  .log .e { padding: 1px 0; white-space: pre; }
+  .log .e.timer { color: var(--warn); }
+  .log .e.trap { color: var(--taskB); }
+  .log .e.fault { color: var(--danger); }
+  .log .e.sw { color: var(--accent); }
+
+  .footnote { text-align: center; color: var(--text-dim); font-size: 13px; margin-top: 30px; }
+  .footnote a { color: var(--accent); text-decoration: none; }
+</style>
 </head>
 <body>
-<h1>bedrock</h1>
-<p>Site coming soon.</p>
-<p><a href="https://github.com/pavanchow/bedrock">View repository</a></p>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Bedrock</h1>
+    <p class="tag">A from-scratch virtual CPU, assembler, and preemptive kernel — running live in your browser.</p>
+    <a class="repo" href="https://github.com/pavanchow/bedrock" target="_blank" rel="noopener">View the Rust engine on GitHub ↗</a>
+  </header>
+
+  <div class="card">
+    <details class="howto" open>
+      <summary>How to use this playground</summary>
+      <div class="howto-body">
+        <p class="lead">This page reimplements Bedrock's instruction set and runs the exact same kernel source the Rust CLI runs. Everything below is computed live in JavaScript — the same ISA, the same two-task round-robin scheduler, the same output.</p>
+
+        <h3>The controls</h3>
+        <ul>
+          <li><code class="inl">Step</code> — execute exactly one thing: one instruction, or the delivery of one pending timer interrupt. Watch the highlighted source line, the registers, and the mode badge change.</li>
+          <li><code class="inl">Run</code> / <code class="inl">Pause</code> — auto-step at the speed set by the slider. Great for watching the two tasks trade places.</li>
+          <li><code class="inl">Run to completion</code> — execute at full speed until the machine halts (both tasks have exited), then draw the whole run.</li>
+          <li><code class="inl">Reset</code> — reassemble the kernel and return the machine to its power-on state.</li>
+          <li><code class="inl">Timer period</code> — how many retired instructions between timer interrupts (the Rust default is 80). Lower it to preempt more aggressively. Changing it resets the machine.</li>
+        </ul>
+
+        <h3>What you are looking at</h3>
+        <ul>
+          <li><b>Registers</b> r0–r7 plus pc and sp. A register lights up the step it changes.</li>
+          <li><b>Flags</b> Z, C, S, O (zero, carry, sign, overflow), I (interrupt-enable) and the <b>mode</b> badge (user vs kernel). Privileged instructions only run in kernel mode.</li>
+          <li><b>Timer</b> a countdown bar to the next timer interrupt. It only ticks while interrupts are enabled, so it freezes inside a handler.</li>
+          <li><b>Kernel source</b> the real <code class="inl">kernel/kernel.asm</code>; the line at the program counter is highlighted as it runs.</li>
+          <li><b>Current instruction</b> the decoded instruction at the pc (round-tripped through the disassembler).</li>
+          <li><b>Memory</b> a live hex view of the image; the pc byte is boxed in blue, the stack pointer in green.</li>
+          <li><b>Vector table</b> the three interrupt vectors (timer, syscall, fault); the one that just fired glows.</li>
+          <li><b>Console</b> bytes the tasks print via the print syscall — task 0 prints <code class="inl">A</code>, task 1 prints <code class="inl">B</code>.</li>
+          <li><b>Task timeline</b> one colored tick per step showing which task (or the kernel) held the CPU. The interleaving of blue and green is preemptive multitasking made visible.</li>
+          <li><b>Event log</b> every timer interrupt, trap, fault, and context switch, in order.</li>
+        </ul>
+
+        <h3>A guided tour (about a minute)</h3>
+        <ol>
+          <li>Press <code class="inl">Step</code> a few times. Boot runs in kernel mode: it sets the stack, installs the vector table with <code class="inl">lidt</code>, then hand-builds a saved stack frame for each task.</li>
+          <li>Keep stepping to the final <code class="inl">iret</code> of boot — the mode badge flips to <b>user</b> and you land in <code class="inl">task0_entry</code>. Task 0 prints its first <code class="inl">A</code> with <code class="inl">trap SYS_PRINT</code>.</li>
+          <li>Watch the timer bar drain. When it hits zero the timer fires: the vector table's row 0 glows, mode flips to <b>kernel</b>, and <code class="inl">timer_handler</code> saves the task's registers and switches to task 1. Now you see <code class="inl">B</code> appear.</li>
+          <li>Press <code class="inl">Run</code> and watch the timeline fill with alternating blue and green — the two tasks time-slicing. When each task has printed its letter six times it calls <code class="inl">trap SYS_EXIT</code>; when both are gone the scheduler executes <code class="inl">halt</code>.</li>
+          <li>Or just press <code class="inl">Run to completion</code>: the console should read <code class="inl">ABBABABABABA</code>, matching the Rust engine byte-for-byte.</li>
+        </ol>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>The machine <span class="sub" id="verifyline">assembling…</span></h2>
+    <div class="controls" style="margin-bottom:16px">
+      <button class="btn" id="stepBtn">Step</button>
+      <button class="btn" id="runBtn">Run</button>
+      <button class="btn secondary" id="finishBtn">Run to completion</button>
+      <button class="btn secondary" id="resetBtn">Reset</button>
+      <div class="spacer"></div>
+      <label>Speed
+        <input type="range" id="speed" min="1" max="200" value="60">
+      </label>
+      <label>Timer period
+        <input type="range" id="timer" min="10" max="200" value="80" step="1">
+        <span class="status-pill" id="timerVal">80</span>
+      </label>
+    </div>
+    <div class="controls">
+      <span class="status-pill" id="statePill">ready</span>
+      <span class="status-pill" id="cyclePill">cycle 0</span>
+      <span class="modebadge kernel" id="modeBadge">KERNEL</span>
+    </div>
+
+    <div class="grid" style="margin-top:20px">
+      <div>
+        <div class="subcard">
+          <h3>Kernel source — kernel/kernel.asm</h3>
+          <div class="source" id="sourceView"></div>
+        </div>
+        <div class="subcard">
+          <h3>Memory (hex)</h3>
+          <div class="hex" id="hexView"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="subcard">
+          <h3>Registers</h3>
+          <div class="regs" id="regsView"></div>
+          <div class="kv" style="margin-top:8px">
+            <div class="cell"><span class="name">pc</span><br><span class="val" id="pcVal">0x0000</span></div>
+            <div class="cell"><span class="name">sp</span><br><span class="val" id="spVal">0xfffc</span></div>
+          </div>
+        </div>
+
+        <div class="subcard">
+          <h3>Flags &amp; mode</h3>
+          <div class="flags" id="flagsView"></div>
+        </div>
+
+        <div class="subcard">
+          <h3>Timer countdown</h3>
+          <div id="timerText" style="font-family:var(--mono);font-size:13px;color:var(--text-dim)">—</div>
+          <div class="timerbar"><div id="timerFill" style="width:0%"></div></div>
+        </div>
+
+        <div class="subcard">
+          <h3>Current instruction @ pc</h3>
+          <div class="curinstr"><span class="a" id="curAddr">0x0000</span><br><span class="txt" id="curTxt">—</span></div>
+        </div>
+
+        <div class="subcard">
+          <h3>Interrupt vector table</h3>
+          <div class="vt" id="vtView"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subcard">
+      <h3>Console output</h3>
+      <div class="console" id="consoleView">&nbsp;</div>
+    </div>
+
+    <div class="subcard">
+      <h3>Task timeline — who holds the CPU each step</h3>
+      <div class="legend">
+        <span class="item"><span class="swatch" style="background:var(--taskA)"></span>Task 0 (prints A)</span>
+        <span class="item"><span class="swatch" style="background:var(--taskB)"></span>Task 1 (prints B)</span>
+        <span class="item"><span class="swatch" style="background:var(--kernel)"></span>Kernel / handlers</span>
+      </div>
+      <div class="tl-scroll"><div class="tl-wide" id="timelineView"></div></div>
+    </div>
+
+    <div class="subcard">
+      <h3>Event log — interrupts, traps, faults, context switches</h3>
+      <div class="log" id="logView"></div>
+    </div>
+  </div>
+
+  <p class="footnote">
+    Bedrock is real: the CPU decodes real bytes, the assembler emits them from text, and the kernel is an assembly source file.
+    Read the full design in <a href="https://github.com/pavanchow/bedrock" target="_blank" rel="noopener">the repository</a>.
+  </p>
+
+</div>
+
+<script>
+"use strict";
+/* ------------------------------------------------------------------ *
+ * Bedrock ISA, assembler, and CPU — a faithful JS port of the Rust
+ * engine in src/. Semantics match src/isa.rs, src/cpu.rs, src/assembler.rs
+ * and the bundled kernel/kernel.asm.
+ * ------------------------------------------------------------------ */
+
+const NUM_REGS = 8;
+const INSTR_SIZE = 8;
+const MEM_SIZE = 0x10000;
+const VEC_TIMER = 0, VEC_SYSCALL = 1, VEC_FAULT = 2;
+const FLAG_ZF = 1 << 0, FLAG_CF = 1 << 1, FLAG_SF = 1 << 2,
+      FLAG_OF = 1 << 3, FLAG_IE = 1 << 4, FLAG_USER = 1 << 5;
+const CONSOLE_OUT = 0xF000;
+
+const u32 = x => x >>> 0;
+
+// opcode byte -> [mnemonic, form, privileged]
+// forms mirror isa.rs Form
+const OPS = {
+  0x00:["nop","None",0],0x01:["mov","Rr",0],0x02:["movi","Ri",0],
+  0x03:["add","Rrr",0],0x04:["sub","Rrr",0],0x05:["mul","Rrr",0],
+  0x06:["and","Rrr",0],0x07:["or","Rrr",0],0x08:["xor","Rrr",0],
+  0x09:["shl","Rrr",0],0x0A:["shr","Rrr",0],
+  0x0B:["addi","Rri",0],0x0C:["subi","Rri",0],0x0D:["muli","Rri",0],
+  0x0E:["andi","Rri",0],0x0F:["ori","Rri",0],0x10:["xori","Rri",0],
+  0x11:["shli","Rri",0],0x12:["shri","Rri",0],
+  0x13:["not","Rr",0],0x14:["neg","Rr",0],
+  0x15:["cmp","Rr2",0],0x16:["cmpi","Ri2",0],
+  0x17:["load","MemLoad",0],0x18:["store","MemStore",0],
+  0x19:["loadb","MemLoad",0],0x1A:["storeb","MemStore",0],
+  0x1B:["jmp","Imm",0],0x1C:["jz","Imm",0],0x1D:["jnz","Imm",0],
+  0x1E:["jc","Imm",0],0x1F:["jnc","Imm",0],0x20:["js","Imm",0],
+  0x21:["jns","Imm",0],0x22:["jo","Imm",0],0x23:["jno","Imm",0],
+  0x24:["jlt","Imm",0],0x25:["jge","Imm",0],0x26:["jle","Imm",0],
+  0x27:["jgt","Imm",0],
+  0x28:["push","Reg",0],0x29:["pop","Reg",0],
+  0x2A:["call","Imm",0],0x2B:["ret","None",0],
+  0x2C:["lidt","Imm",1],0x2D:["sti","None",1],0x2E:["cli","None",1],
+  0x2F:["iret","None",1],0x30:["trap","Imm",0],0x31:["halt","None",1],
+  0x32:["spget","Reg",0],0x33:["spset","Reg",0],
+};
+const MNEM = {}; // mnemonic -> opcode byte
+for (const b in OPS) MNEM[OPS[b][0]] = parseInt(b, 10);
+// aliases (isa.rs from_mnemonic)
+MNEM["jeq"] = MNEM["jz"]; MNEM["jne"] = MNEM["jnz"];
+
+/* ---------------- assembler (port of src/assembler.rs) ------------- */
+
+function stripComment(line) { const i = line.indexOf(";"); return i < 0 ? line : line.slice(0, i); }
+function isIdent(s) {
+  if (!s.length) return false;
+  const c = s[0];
+  if (!(/[A-Za-z]/.test(c) || c === "_" || c === ".")) return false;
+  for (let i = 1; i < s.length; i++) { const d = s[i]; if (!(/[A-Za-z0-9]/.test(d) || d === "_" || d === ".")) return false; }
+  return true;
+}
+function tokenize(s) {
+  const out = []; let cur = ""; let inStr = false, inBrk = false;
+  for (const ch of s) {
+    if (ch === '"') { inStr = !inStr; cur += ch; }
+    else if (ch === "[" && !inStr) { inBrk = true; cur += ch; }
+    else if (ch === "]" && !inStr) { inBrk = false; cur += ch; }
+    else if (/\s/.test(ch) && !inStr && !inBrk) { if (cur) { out.push(cur); cur = ""; } }
+    else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+function splitCommas(s) {
+  const out = []; let cur = ""; let inStr = false, depth = 0;
+  for (const ch of s) {
+    if (ch === '"') { inStr = !inStr; cur += ch; }
+    else if (ch === "[" && !inStr) { depth++; cur += ch; }
+    else if (ch === "]" && !inStr) { depth--; cur += ch; }
+    else if (ch === "," && !inStr && depth === 0) { const t = cur.trim(); if (t) out.push(t); cur = ""; }
+    else cur += ch;
+  }
+  const t = cur.trim(); if (t) out.push(t);
+  return out;
+}
+function parseString(line) {
+  const start = line.indexOf('"'); if (start < 0) throw "string needs a quoted literal";
+  const end = line.lastIndexOf('"'); if (end <= start) throw "unterminated string";
+  const body = line.slice(start + 1, end); const out = [];
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === "\\") {
+      const n = body[++i];
+      if (n === "n") out.push(10); else if (n === "t") out.push(9);
+      else if (n === "0") out.push(0); else if (n === "\\") out.push(92);
+      else if (n === '"') out.push(34); else if (n === undefined) throw "dangling escape";
+      else out.push(n.charCodeAt(0));
+    } else out.push(c.charCodeAt(0) & 0xff);
+  }
+  return out;
+}
+function parseNum(s) {
+  s = s.trim();
+  if (/^0x/i.test(s)) { const v = parseInt(s.slice(2), 16); return Number.isNaN(v) ? null : u32(v); }
+  if (/^0b/.test(s)) { const v = parseInt(s.slice(2), 2); return Number.isNaN(v) ? null : u32(v); }
+  if (s[0] === "-") { const v = parseInt(s.slice(1), 10); if (Number.isNaN(v)) return null; return u32(-v); }
+  if (/^[0-9]+$/.test(s)) return u32(parseInt(s, 10));
+  return null;
+}
+function parseChar(s) {
+  s = s.trim();
+  if (s.length >= 3 && s[0] === "'" && s[s.length - 1] === "'") {
+    const body = s.slice(1, -1);
+    if (body === "\\n") return 10; if (body === "\\t") return 9; if (body === "\\0") return 0;
+    if ([...body].length === 1) return body.charCodeAt(0);
+  }
+  return null;
+}
+function parseReg(s) {
+  s = s.trim().toLowerCase();
+  if (s[0] !== "r") return null;
+  const n = parseInt(s.slice(1), 10);
+  if (!/^[0-9]+$/.test(s.slice(1))) return null;
+  return n < NUM_REGS ? n : null;
+}
+function evalTerm(t, labels, consts) {
+  let v = parseNum(t); if (v !== null) return v;
+  v = parseChar(t); if (v !== null) return v;
+  if (t in consts) return consts[t];
+  if (t in labels) return labels[t];
+  throw "cannot resolve '" + t + "'";
+}
+function evalExpr(s, labels, consts) {
+  s = s.trim();
+  let acc = 0, sign = 1, term = "", first = true;
+  const flush = () => {
+    const t = term.trim();
+    if (!t) { if (first) return; throw "empty term in '" + s + "'"; }
+    const v = evalTerm(t, labels, consts);
+    acc = sign >= 0 ? u32(acc + v) : u32(acc - v);
+  };
+  for (const ch of s) {
+    if ((ch === "+" || ch === "-") && term.trim() !== "") {
+      flush(); first = false; term = ""; sign = ch === "-" ? -1 : 1;
+    } else term += ch;
+  }
+  flush();
+  return u32(acc);
+}
+function evalNow(s, consts) { return evalExpr(s, {}, consts); }
+function parseMem(s, labels, consts) {
+  const inner0 = s.trim();
+  if (inner0[0] !== "[" || inner0[inner0.length - 1] !== "]") throw "memory operand must be [..]";
+  const inner = inner0.slice(1, -1);
+  let pos = -1;
+  for (let i = 0; i < inner.length; i++) if (inner[i] === "+" || inner[i] === "-") { pos = i; break; }
+  if (pos >= 0) {
+    const rb = parseReg(inner.slice(0, pos).trim()); if (rb === null) throw "bad base register";
+    const sign = inner[pos];
+    const mag = evalExpr(inner.slice(pos + 1).trim(), labels, consts);
+    const disp = sign === "-" ? u32(0 - mag) : mag;
+    return [rb, disp];
+  }
+  const rb = parseReg(inner.trim()); if (rb === null) throw "bad base register";
+  return [rb, 0];
+}
+
+// forms that take (rd, ra, rb)
+function encodeInstr(op, operands, labels, consts) {
+  const form = OPS[op][1];
+  const want = n => { if (operands.length !== n) throw OPS[op][0] + " expects " + n + " operands, got " + operands.length; };
+  const reg = s => { const r = parseReg(s); if (r === null) throw "bad register '" + s + "'"; return r; };
+  const imm = s => evalExpr(s, labels, consts);
+  let a = 0, b = 0, c = 0, im = 0;
+  switch (form) {
+    case "None": want(0); break;
+    case "Rrr": want(3); a = reg(operands[0]); b = reg(operands[1]); c = reg(operands[2]); break;
+    case "Rri": want(3); a = reg(operands[0]); b = reg(operands[1]); im = imm(operands[2]); break;
+    case "Rr":  want(2); a = reg(operands[0]); b = reg(operands[1]); break;
+    case "Ri":  want(2); a = reg(operands[0]); im = imm(operands[1]); break;
+    case "Rr2": want(2); a = reg(operands[0]); b = reg(operands[1]); break;
+    case "Ri2": want(2); a = reg(operands[0]); im = imm(operands[1]); break;
+    case "MemLoad": case "MemStore": {
+      want(2); a = reg(operands[0]); const [rb, disp] = parseMem(operands[1], labels, consts); b = rb; im = disp; break;
+    }
+    case "Reg": want(1); a = reg(operands[0]); break;
+    case "Imm": want(1); im = imm(operands[0]); break;
+  }
+  return { op, a, b, c, imm: u32(im) };
+}
+
+function assemble(src) {
+  const labels = {}, consts = {}, parsed = [];
+  let addr = 0;
+  const lines = src.split("\n");
+  for (let idx = 0; idx < lines.length; idx++) {
+    const lineNo = idx + 1;
+    let line = stripComment(lines[idx]).trim();
+    if (!line) continue;
+    let rest = line;
+    // leading labels
+    while (true) {
+      const colon = rest.indexOf(":");
+      if (colon >= 0) {
+        const raw = rest.slice(0, colon);
+        const name = raw.trim();
+        if (isIdent(name) && !/\s/.test(raw)) {
+          if (name in labels) throw "line " + lineNo + ": duplicate label '" + name + "'";
+          labels[name] = addr;
+          rest = rest.slice(colon + 1).trim();
+          if (!rest) break;
+          continue;
+        }
+      }
+      break;
+    }
+    if (!rest) continue;
+    const toks = tokenize(rest);
+    const head = toks.shift().toLowerCase();
+    if (head[0] === ".") {
+      const dir = head.slice(1);
+      if (dir === "org") { addr = evalNow(toks.join(""), consts); }
+      else if (dir === "equ") {
+        if (toks.length < 2) throw "line " + lineNo + ": .equ needs NAME VALUE";
+        const nm = toks[0]; consts[nm] = evalNow(toks.slice(1).join(""), consts);
+      }
+      else if (dir === "word") { const items = splitCommas(toks.join(" ")); parsed.push({ lineNo, addr, kind: "word", items }); addr += 4 * items.length; }
+      else if (dir === "byte") { const items = splitCommas(toks.join(" ")); parsed.push({ lineNo, addr, kind: "byte", items }); addr += items.length; }
+      else if (dir === "string") { const bytes = parseString(rest); parsed.push({ lineNo, addr, kind: "str", bytes }); addr += bytes.length; }
+      else if (dir === "space") { const n = evalNow(toks.join(""), consts); parsed.push({ lineNo, addr, kind: "space" }); addr += n; }
+      else throw "line " + lineNo + ": unknown directive ." + dir;
+      continue;
+    }
+    const op = MNEM[head];
+    if (op === undefined) throw "line " + lineNo + ": unknown mnemonic '" + head + "'";
+    const operands = splitCommas(toks.join(" "));
+    parsed.push({ lineNo, addr, kind: "instr", op, operands });
+    addr += INSTR_SIZE;
+  }
+  const origin = parsed.length ? parsed[0].addr : 0;
+  const end = addr;
+  if (end < origin) throw "assembled image ends before its origin";
+  const code = new Uint8Array(end - origin);
+  const instrLines = {}; // addr -> lineNo (for highlight)
+  for (const p of parsed) {
+    const off = p.addr - origin;
+    if (p.kind === "instr") {
+      const instr = encodeInstr(p.op, p.operands, labels, consts);
+      code.set(encode(instr), off);
+      instrLines[p.addr] = p.lineNo;
+    } else if (p.kind === "word") {
+      p.items.forEach((it, i) => { const v = evalExpr(it, labels, consts); writeLE(code, off + i * 4, v); });
+    } else if (p.kind === "byte") {
+      p.items.forEach((it, i) => { code[off + i] = evalExpr(it, labels, consts) & 0xff; });
+    } else if (p.kind === "str") {
+      code.set(p.bytes, off);
+    }
+  }
+  return { origin, code, labels, instrLines };
+}
+function encode(instr) {
+  return [instr.op, instr.a & 0xff, instr.b & 0xff, instr.c & 0xff,
+          instr.imm & 0xff, (instr.imm >>> 8) & 0xff, (instr.imm >>> 16) & 0xff, (instr.imm >>> 24) & 0xff];
+}
+function writeLE(buf, off, v) { buf[off] = v & 0xff; buf[off+1] = (v>>>8)&0xff; buf[off+2] = (v>>>16)&0xff; buf[off+3] = (v>>>24)&0xff; }
+function decode(bytes) {
+  const spec = OPS[bytes[0]];
+  if (!spec) return null;
+  const imm = u32(bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24));
+  return { op: bytes[0], a: bytes[1], b: bytes[2], c: bytes[3], imm };
+}
+function disasmInstr(instr) {
+  const spec = OPS[instr.op]; const m = spec[0]; const form = spec[1];
+  const a = instr.a & 7, b = instr.b & 7, c = instr.c & 7, imm = instr.imm;
+  switch (form) {
+    case "None": return m;
+    case "Rrr": return `${m} r${a}, r${b}, r${c}`;
+    case "Rri": return `${m} r${a}, r${b}, ${imm}`;
+    case "Rr": return `${m} r${a}, r${b}`;
+    case "Ri": return `${m} r${a}, ${imm}`;
+    case "Rr2": return `${m} r${a}, r${b}`;
+    case "Ri2": return `${m} r${a}, ${imm}`;
+    case "MemLoad": case "MemStore": {
+      const d = imm | 0;
+      if (d === 0) return `${m} r${a}, [r${b}]`;
+      if (d < 0) return `${m} r${a}, [r${b} - ${-d}]`;
+      return `${m} r${a}, [r${b} + ${d}]`;
+    }
+    case "Reg": return `${m} r${a}`;
+    case "Imm": return `${m} ${imm}`;
+  }
+  return m;
+}
+
+/* ---------------- CPU (port of src/cpu.rs) ------------------------- */
+
+class Cpu {
+  constructor() {
+    this.regs = new Uint32Array(NUM_REGS);
+    this.pc = 0;
+    this.sp = u32(MEM_SIZE - 4);
+    this.flags = { zf:false, cf:false, sf:false, of:false, ie:false, user:false };
+    this.ivt_base = 0;
+    this.mem = new Uint8Array(MEM_SIZE);
+    this.cycles = 0;
+    this.timer_period = 0;
+    this.next_timer = 0;
+    this.halted = false;
+    this.output = [];
+    this.console_out = CONSOLE_OUT;
+  }
+  loadImage(addr, image) { this.mem.set(image, addr); }
+  setTimer(p) { this.timer_period = p; this.next_timer = this.cycles + p; }
+  flagsToU32() { const f = this.flags; let v = 0;
+    if (f.zf) v |= FLAG_ZF; if (f.cf) v |= FLAG_CF; if (f.sf) v |= FLAG_SF;
+    if (f.of) v |= FLAG_OF; if (f.ie) v |= FLAG_IE; if (f.user) v |= FLAG_USER; return u32(v); }
+  flagsFromU32(v) { this.flags = {
+    zf:!!(v&FLAG_ZF), cf:!!(v&FLAG_CF), sf:!!(v&FLAG_SF),
+    of:!!(v&FLAG_OF), ie:!!(v&FLAG_IE), user:!!(v&FLAG_USER) }; }
+  inBounds(addr, len) { return addr + len <= MEM_SIZE; }
+  readWord(a) { return u32(this.mem[a] | (this.mem[a+1]<<8) | (this.mem[a+2]<<16) | (this.mem[a+3]<<24)); }
+  writeWord(a, v) { this.mem[a]=v&0xff; this.mem[a+1]=(v>>>8)&0xff; this.mem[a+2]=(v>>>16)&0xff; this.mem[a+3]=(v>>>24)&0xff; }
+  push(v) { this.sp = u32(this.sp - 4); this.writeWord(this.sp, v); }
+  pop() { const v = this.readWord(this.sp); this.sp = u32(this.sp + 4); return v; }
+  enterVector(index) {
+    this.push(this.flagsToU32());
+    this.push(this.pc);
+    this.flags.user = false;
+    this.flags.ie = false;
+    this.pc = this.readWord(u32(this.ivt_base + index * 4));
+  }
+  fault(code) { this.regs[7] = code; this.enterVector(VEC_FAULT); return { kind:"fault", code }; }
+
+  setNZ(r) { this.flags.zf = (r === 0); this.flags.sf = (r & 0x80000000) !== 0; }
+  aluBit(r) { r = u32(r); this.setNZ(r); this.flags.cf = false; this.flags.of = false; return r; }
+  aluAdd(x, y) { x=u32(x); y=u32(y); const s = x + y; const r = u32(s); this.setNZ(r);
+    this.flags.cf = s > 0xFFFFFFFF; this.flags.of = ((x ^ r) & (y ^ r) & 0x80000000) !== 0; return r; }
+  aluSub(x, y) { x=u32(x); y=u32(y); const r = u32(x - y); this.setNZ(r);
+    this.flags.cf = x < y; this.flags.of = ((x ^ y) & (x ^ r) & 0x80000000) !== 0; return r; }
+  aluMul(x, y) { const wide = BigInt(u32(x)) * BigInt(u32(y)); const r = Number(wide & 0xFFFFFFFFn);
+    this.setNZ(r); const ov = wide > 0xFFFFFFFFn; this.flags.cf = ov; this.flags.of = ov; return r; }
+  branch(take, target) { if (take) this.pc = u32(target); }
+
+  step() {
+    if (this.halted) return { kind:"halted" };
+    if (this.timer_period !== 0 && this.flags.ie && this.cycles >= this.next_timer) {
+      this.next_timer = this.cycles + this.timer_period;
+      this.enterVector(VEC_TIMER);
+      return { kind:"timer" };
+    }
+    if (!this.inBounds(this.pc, INSTR_SIZE)) return this.fault(2);
+    const base = this.pc;
+    const bytes = this.mem.subarray(base, base + 8);
+    const instr = decode(bytes);
+    if (!instr) return this.fault(3);
+    if (OPS[instr.op][2] && this.flags.user) return this.fault(1);
+
+    this.pc = u32(this.pc + INSTR_SIZE);
+    this.cycles += 1;
+
+    const a = instr.a & 7, b = instr.b & 7, c = instr.c & 7, imm = instr.imm;
+    const R = this.regs;
+    const name = OPS[instr.op][0];
+    switch (name) {
+      case "nop": break;
+      case "mov": R[a] = R[b]; break;
+      case "movi": R[a] = imm; break;
+      case "add": R[a] = this.aluAdd(R[b], R[c]); break;
+      case "sub": R[a] = this.aluSub(R[b], R[c]); break;
+      case "mul": R[a] = this.aluMul(R[b], R[c]); break;
+      case "and": R[a] = this.aluBit(R[b] & R[c]); break;
+      case "or":  R[a] = this.aluBit(R[b] | R[c]); break;
+      case "xor": R[a] = this.aluBit(R[b] ^ R[c]); break;
+      case "shl": R[a] = this.aluBit(R[b] << (R[c] & 31)); break;
+      case "shr": R[a] = this.aluBit(R[b] >>> (R[c] & 31)); break;
+      case "addi": R[a] = this.aluAdd(R[b], imm); break;
+      case "subi": R[a] = this.aluSub(R[b], imm); break;
+      case "muli": R[a] = this.aluMul(R[b], imm); break;
+      case "andi": R[a] = this.aluBit(R[b] & imm); break;
+      case "ori":  R[a] = this.aluBit(R[b] | imm); break;
+      case "xori": R[a] = this.aluBit(R[b] ^ imm); break;
+      case "shli": R[a] = this.aluBit(R[b] << (imm & 31)); break;
+      case "shri": R[a] = this.aluBit(R[b] >>> (imm & 31)); break;
+      case "not": R[a] = this.aluBit(~R[b]); break;
+      case "neg": R[a] = this.aluSub(0, R[b]); break;
+      case "cmp": this.aluSub(R[a], R[b]); break;
+      case "cmpi": this.aluSub(R[a], imm); break;
+      case "load": { const addr = u32(R[b] + imm); if (!this.inBounds(addr, 4)) return this.fault(2); R[a] = this.readWord(addr); break; }
+      case "store": { const addr = u32(R[b] + imm); if (!this.inBounds(addr, 4)) return this.fault(2); this.writeWord(addr, R[a]); break; }
+      case "loadb": { const addr = u32(R[b] + imm); if (!this.inBounds(addr, 1)) return this.fault(2); R[a] = this.mem[addr]; break; }
+      case "storeb": { const addr = u32(R[b] + imm); if (!this.inBounds(addr, 1)) return this.fault(2);
+        this.mem[addr] = R[a] & 0xff; if (addr === this.console_out) this.output.push(R[a] & 0xff); break; }
+      case "jmp": this.pc = imm; break;
+      case "jz": this.branch(this.flags.zf, imm); break;
+      case "jnz": this.branch(!this.flags.zf, imm); break;
+      case "jc": this.branch(this.flags.cf, imm); break;
+      case "jnc": this.branch(!this.flags.cf, imm); break;
+      case "js": this.branch(this.flags.sf, imm); break;
+      case "jns": this.branch(!this.flags.sf, imm); break;
+      case "jo": this.branch(this.flags.of, imm); break;
+      case "jno": this.branch(!this.flags.of, imm); break;
+      case "jlt": this.branch(this.flags.sf !== this.flags.of, imm); break;
+      case "jge": this.branch(this.flags.sf === this.flags.of, imm); break;
+      case "jle": this.branch(this.flags.zf || (this.flags.sf !== this.flags.of), imm); break;
+      case "jgt": this.branch(!this.flags.zf && (this.flags.sf === this.flags.of), imm); break;
+      case "push": this.push(R[a]); break;
+      case "pop": R[a] = this.pop(); break;
+      case "call": this.push(this.pc); this.pc = imm; break;
+      case "ret": this.pc = this.pop(); break;
+      case "lidt": this.ivt_base = imm; break;
+      case "sti": this.flags.ie = true; break;
+      case "cli": this.flags.ie = false; break;
+      case "iret": this.pc = this.pop(); this.flagsFromU32(this.pop()); break;
+      case "trap": this.regs[6] = imm; this.enterVector(VEC_SYSCALL); return { kind:"trap", n: imm };
+      case "halt": this.halted = true; return { kind:"halted" };
+      case "spget": R[a] = this.sp; break;
+      case "spset": this.sp = R[a]; break;
+    }
+    return { kind:"ran", op: instr.op };
+  }
+}
+
+/* ---------------- the bundled kernel source ----------------------- */
+/* This is kernel/kernel.asm verbatim. */
+const KERNEL_SRC = String.raw`; Bedrock kernel: a preemptive round-robin scheduler for two user tasks.
+;
+; Boot installs the interrupt vector table, seeds a saved context for each
+; task, then returns into task 0 in user mode. The timer interrupt preempts
+; the running task and switches to the next runnable one. Tasks reach the
+; kernel through the trap instruction to print, yield, and exit.
+;
+; The whole context of a suspended task lives on that task's own stack as
+; [flags][pc][r0..r7]. A context switch is therefore just: save the current
+; stack pointer into its task control block, load the next task's stack
+; pointer, and iret.
+
+.equ SYS_PRINT   1
+.equ SYS_YIELD   2
+.equ SYS_EXIT    3
+.equ CONSOLE     0xF000
+.equ NTASKS      2
+.equ UFLAGS      0x30        ; FLAG_USER (0x20) | FLAG_IE (0x10)
+
+; reset vector: execution begins at address 0.
+    jmp _start
+
+; ----------------------------------------------------------------------
+; Boot
+; ----------------------------------------------------------------------
+_start:
+    movi r0, kstack_top
+    spset r0
+
+    ; install the interrupt vector table
+    movi r1, ivt
+    movi r0, timer_handler
+    store r0, [r1]
+    movi r0, syscall_handler
+    store r0, [r1 + 4]
+    movi r0, fault_handler
+    store r0, [r1 + 8]
+    lidt ivt
+
+    ; seed task 0's stack frame and save its stack pointer
+    movi r0, task0_stack_top
+    spset r0
+    movi r0, UFLAGS
+    push r0
+    movi r0, task0_entry
+    push r0
+    movi r0, 0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    spget r0
+    movi r1, tcb_sp
+    store r0, [r1]
+
+    ; seed task 1's stack frame and save its stack pointer
+    movi r0, task1_stack_top
+    spset r0
+    movi r0, UFLAGS
+    push r0
+    movi r0, task1_entry
+    push r0
+    movi r0, 0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    push r0
+    spget r0
+    movi r1, tcb_sp
+    store r0, [r1 + 4]
+
+    ; current task = 0, then launch it by restoring its frame
+    movi r0, 0
+    movi r1, cur_task
+    store r0, [r1]
+    movi r1, tcb_sp
+    load r2, [r1]
+    spset r2
+    pop r7
+    pop r6
+    pop r5
+    pop r4
+    pop r3
+    pop r2
+    pop r1
+    pop r0
+    iret
+
+; ----------------------------------------------------------------------
+; Timer interrupt: preempt the running task and schedule the next one.
+; ----------------------------------------------------------------------
+timer_handler:
+    push r0
+    push r1
+    push r2
+    push r3
+    push r4
+    push r5
+    push r6
+    push r7
+    jmp ctx_save
+
+; ----------------------------------------------------------------------
+; Syscall / trap handler. r6 holds the trap number, r1 the argument.
+; ----------------------------------------------------------------------
+syscall_handler:
+    cmpi r6, SYS_PRINT
+    jz sys_print
+    ; yield and exit both switch tasks, so save the full context first
+    push r0
+    push r1
+    push r2
+    push r3
+    push r4
+    push r5
+    push r6
+    push r7
+    cmpi r6, SYS_EXIT
+    jz mark_exit
+    jmp ctx_save
+
+sys_print:
+    movi r2, CONSOLE
+    storeb r1, [r2]
+    iret
+
+mark_exit:
+    movi r0, cur_task
+    load r0, [r0]
+    movi r1, tcb_state
+    shli r2, r0, 2
+    add r1, r1, r2
+    movi r2, 1
+    store r2, [r1]
+    ; fall through into the scheduler
+
+; Save the current stack pointer, choose the next runnable task, restore it.
+ctx_save:
+    movi r0, cur_task
+    load r0, [r0]
+    movi r1, tcb_sp
+    shli r2, r0, 2
+    add r1, r1, r2
+    spget r2
+    store r2, [r1]
+
+    ; scan for the next runnable task starting after the current one
+    movi r3, NTASKS
+    movi r4, 0
+pick_loop:
+    addi r0, r0, 1
+    cmp r0, r3
+    jlt no_wrap
+    movi r0, 0
+no_wrap:
+    movi r1, tcb_state
+    shli r2, r0, 2
+    add r1, r1, r2
+    load r1, [r1]
+    cmpi r1, 0
+    jz found
+    addi r4, r4, 1
+    cmp r4, r3
+    jlt pick_loop
+    halt                    ; no runnable task remains
+
+found:
+    movi r1, cur_task
+    store r0, [r1]
+    movi r1, tcb_sp
+    shli r2, r0, 2
+    add r1, r1, r2
+    load r2, [r1]
+    spset r2
+    pop r7
+    pop r6
+    pop r5
+    pop r4
+    pop r3
+    pop r2
+    pop r1
+    pop r0
+    iret
+
+; ----------------------------------------------------------------------
+; Fault handler: print '!' and halt. The demo tasks never trigger it.
+; ----------------------------------------------------------------------
+fault_handler:
+    movi r2, CONSOLE
+    movi r1, '!'
+    storeb r1, [r2]
+    halt
+
+; ----------------------------------------------------------------------
+; User task 0: print 'A' six times, doing busy work so the timer preempts it.
+; ----------------------------------------------------------------------
+task0_entry:
+    movi r5, 0
+t0_loop:
+    movi r1, 'A'
+    trap SYS_PRINT
+    addi r5, r5, 1
+    movi r2, 0
+t0_busy:
+    addi r2, r2, 1
+    cmpi r2, 20
+    jlt t0_busy
+    cmpi r5, 6
+    jlt t0_loop
+    trap SYS_EXIT
+t0_hang:
+    jmp t0_hang
+
+; ----------------------------------------------------------------------
+; User task 1: print 'B' six times.
+; ----------------------------------------------------------------------
+task1_entry:
+    movi r5, 0
+t1_loop:
+    movi r1, 'B'
+    trap SYS_PRINT
+    addi r5, r5, 1
+    movi r2, 0
+t1_busy:
+    addi r2, r2, 1
+    cmpi r2, 20
+    jlt t1_busy
+    cmpi r5, 6
+    jlt t1_loop
+    trap SYS_EXIT
+t1_hang:
+    jmp t1_hang
+
+; ----------------------------------------------------------------------
+; Data: vector table, task control blocks, and stacks.
+; ----------------------------------------------------------------------
+ivt:
+    .space 12               ; three vectors: timer, syscall, fault
+cur_task:
+    .word 0
+tcb_sp:
+    .word 0, 0
+tcb_state:
+    .word 0, 0
+
+    .space 256
+kstack_top:
+    .space 4
+
+    .space 256
+task0_stack_top:
+    .space 4
+
+    .space 256
+task1_stack_top:
+    .space 4
+`;
+
+/* ---------------- driver / UI ------------------------------------- */
+
+const MAX_CYCLES = 20000;
+const DEFAULT_TIMER = 80;
+
+let asm, cpu, curTaskAddr, timerPeriod = DEFAULT_TIMER;
+let running = false, runHandle = null;
+let prevRegs = new Uint32Array(NUM_REGS), prevPc = 0, prevSp = 0;
+let lastTask = 0;
+let timeline = [];   // {task, mode}
+let logEntries = []; // strings w/ class
+let lastVector = -1;
+let stats = { timer:0, trap:0, fault:0, switches:0 };
+
+const $ = id => document.getElementById(id);
+
+function hex(v, w) { return "0x" + (v >>> 0).toString(16).padStart(w || 4, "0"); }
+
+function whichTask() {
+  // The task index the CPU is currently executing on, or "kernel" if in a
+  // handler. In user mode the running task is cur_task; in kernel mode we are
+  // in a handler / boot.
+  if (!cpu.flags.user) return "K";
+  return cpu.readWord(curTaskAddr) === 0 ? "A" : "B";
+}
+
+function reset() {
+  stopRun();
+  asm = assemble(KERNEL_SRC);
+  curTaskAddr = asm.labels["cur_task"];
+  cpu = new Cpu();
+  cpu.loadImage(asm.origin, asm.code);
+  cpu.pc = asm.origin;
+  cpu.setTimer(timerPeriod);
+  prevRegs = new Uint32Array(NUM_REGS);
+  prevPc = cpu.pc; prevSp = cpu.sp;
+  lastTask = cpu.readWord(curTaskAddr);
+  timeline = []; logEntries = []; lastVector = -1;
+  stats = { timer:0, trap:0, fault:0, switches:0 };
+  buildSource();
+  render();
+  $("statePill").textContent = "ready";
+}
+
+function doStep() {
+  if (cpu.halted) return false;
+  prevRegs = cpu.regs.slice();
+  prevPc = cpu.pc; prevSp = cpu.sp;
+  const ieBefore = cpu.flags.ie, cyBefore = cpu.cycles;
+  const ev = cpu.step();
+
+  lastVector = -1;
+  if (ev.kind === "timer") { stats.timer++; lastVector = VEC_TIMER; pushLog("timer", `cycle ${cpu.cycles}: TIMER interrupt -> vector 0 -> kernel`); }
+  else if (ev.kind === "trap") { stats.trap++; lastVector = VEC_SYSCALL;
+    const nm = ev.n === 1 ? "SYS_PRINT" : ev.n === 2 ? "SYS_YIELD" : ev.n === 3 ? "SYS_EXIT" : ("#" + ev.n);
+    pushLog("trap", `cycle ${cpu.cycles}: TRAP ${ev.n} (${nm}) -> vector 1 -> kernel`); }
+  else if (ev.kind === "fault") { stats.fault++; lastVector = VEC_FAULT; pushLog("fault", `cycle ${cpu.cycles}: FAULT ${ev.code} -> vector 2`); }
+
+  const curTask = cpu.readWord(curTaskAddr);
+  if (curTask !== lastTask) { stats.switches++; lastTask = curTask;
+    pushLog("sw", `cycle ${cpu.cycles}: context switch -> task ${curTask} (${curTask === 0 ? "A" : "B"})`); }
+
+  // Record timeline sample (skip the halted no-op)
+  if (ev.kind !== "halted") timeline.push(whichTask());
+  else if (timeline.length === 0 || cpu.halted) { /* halted */ }
+
+  return ev.kind !== "halted";
+}
+
+function pushLog(cls, text) { logEntries.push({ cls, text }); if (logEntries.length > 400) logEntries.shift(); }
+
+function stepOnce() { doStep(); render(); }
+
+function runToCompletion() {
+  stopRun();
+  let guard = 0;
+  while (!cpu.halted && cpu.cycles < MAX_CYCLES && guard < MAX_CYCLES + 5) { doStep(); guard++; }
+  render();
+  $("statePill").textContent = cpu.halted ? "halted (both tasks exited)" : "cycle cap reached";
+}
+
+function startRun() {
+  if (running) return;
+  running = true;
+  $("runBtn").textContent = "Pause";
+  const tick = () => {
+    if (!running) return;
+    const speed = parseInt($("speed").value, 10);
+    const per = Math.max(1, Math.round(speed / 12));
+    let alive = true;
+    for (let i = 0; i < per && alive; i++) alive = doStep();
+    render();
+    if (!alive || cpu.cycles >= MAX_CYCLES) { stopRun(); $("statePill").textContent = cpu.halted ? "halted (both tasks exited)" : "cycle cap reached"; return; }
+    runHandle = setTimeout(tick, Math.max(8, 220 - speed));
+  };
+  tick();
+}
+function stopRun() { running = false; if (runHandle) { clearTimeout(runHandle); runHandle = null; } $("runBtn").textContent = "Run"; }
+function toggleRun() { if (running) stopRun(); else startRun(); }
+
+/* ---- rendering ---- */
+
+let srcLineByAddr = null;
+function buildSource() {
+  // addr -> line for highlight
+  srcLineByAddr = asm.instrLines;
+  const lines = KERNEL_SRC.split("\n");
+  const html = lines.map((raw, i) => {
+    const n = i + 1;
+    return `<div class="ln" data-line="${n}"><span class="num">${n}</span><span class="txt">${colorize(raw)}</span></div>`;
+  }).join("");
+  $("sourceView").innerHTML = html;
+}
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function colorize(raw) {
+  const ci = raw.indexOf(";");
+  let code = ci < 0 ? raw : raw.slice(0, ci);
+  let cmt = ci < 0 ? "" : raw.slice(ci);
+  let out = esc(code);
+  // label
+  out = out.replace(/^(\s*)([A-Za-z_.][A-Za-z0-9_.]*)(:)/, (m,a,b,c) => `${a}<span class="lbl">${b}</span>${c}`);
+  // directive
+  out = out.replace(/(^|\s)(\.[a-z]+)/g, (m,a,b) => `${a}<span class="dir">${b}</span>`);
+  // mnemonic (first word after optional whitespace/label)
+  out = out.replace(/(^\s*)([a-z]{2,6})(\s|$)/, (m,a,b,c) => {
+    return (MNEM[b] !== undefined) ? `${a}<span class="mn">${b}</span>${c}` : m;
+  });
+  if (cmt) out += `<span class="cmt">${esc(cmt)}</span>`;
+  return out || "&nbsp;";
+}
+
+function render() {
+  // registers
+  let rhtml = "";
+  for (let i = 0; i < NUM_REGS; i++) {
+    const changed = cpu.regs[i] !== prevRegs[i];
+    rhtml += `<div class="reg ${changed ? "changed" : ""}"><span class="name">r${i}</span><br><span class="val">${hex(cpu.regs[i], 8)}</span></div>`;
+  }
+  $("regsView").innerHTML = rhtml;
+  $("pcVal").textContent = hex(cpu.pc, 4);
+  $("spVal").textContent = hex(cpu.sp, 4);
+
+  // flags + mode
+  const f = cpu.flags;
+  const fl = [["Z",f.zf],["C",f.cf],["S",f.sf],["O",f.of],["I",f.ie]];
+  $("flagsView").innerHTML = fl.map(([n,on]) => `<span class="flag ${on?"on":""}">${n}</span>`).join("") +
+    `<span class="modebadge ${f.user?"user":"kernel"}">${f.user?"USER":"KERNEL"}</span>`;
+  const mb = $("modeBadge"); mb.className = "modebadge " + (f.user?"user":"kernel"); mb.textContent = f.user?"USER":"KERNEL";
+
+  // cycle / state
+  $("cyclePill").textContent = "cycle " + cpu.cycles;
+
+  // timer bar
+  if (cpu.timer_period > 0 && cpu.flags.ie) {
+    const remaining = Math.max(0, cpu.next_timer - cpu.cycles);
+    const frac = remaining / cpu.timer_period;
+    $("timerFill").style.width = (frac * 100) + "%";
+    $("timerText").textContent = `${remaining} instruction(s) to next timer interrupt`;
+  } else {
+    $("timerFill").style.width = "0%";
+    $("timerText").textContent = cpu.flags.ie ? "timer disabled" : "interrupts masked (inside handler) — timer frozen";
+  }
+
+  // current instruction
+  const inb = cpu.pc + 8 <= MEM_SIZE;
+  let curTxt = "—";
+  if (inb) { const d = decode(cpu.mem.subarray(cpu.pc, cpu.pc + 8)); curTxt = d ? disasmInstr(d) : ".word (data)"; }
+  $("curAddr").textContent = hex(cpu.pc, 4) + (cpu.halted ? "  (halted)" : "");
+  $("curTxt").textContent = curTxt;
+
+  // source highlight
+  const line = srcLineByAddr[cpu.pc];
+  const sv = $("sourceView");
+  const prevCur = sv.querySelector(".ln.cur");
+  if (prevCur) prevCur.classList.remove("cur");
+  if (line) {
+    const el = sv.querySelector(`.ln[data-line="${line}"]`);
+    if (el) { el.classList.add("cur"); el.scrollIntoView({ block: "nearest" }); }
+  }
+
+  // vector table
+  const vecs = [["0","timer",VEC_TIMER],["1","syscall",VEC_SYSCALL],["2","fault",VEC_FAULT]];
+  $("vtView").innerHTML = vecs.map(([idx,nm,vi]) => {
+    const target = cpu.ivt_base ? cpu.readWord(cpu.ivt_base + vi*4) : 0;
+    const hit = lastVector === vi;
+    return `<div class="row ${hit?"hit":""}"><span class="idx">[${idx}]</span><span>${nm}</span><span style="margin-left:auto">→ ${hex(target,4)}</span></div>`;
+  }).join("");
+
+  // console
+  const out = cpu.output.map(b => String.fromCharCode(b)).join("");
+  $("consoleView").textContent = out || " ";
+
+  // memory hex
+  renderHex();
+
+  // timeline
+  renderTimeline();
+
+  // log
+  $("logView").innerHTML = logEntries.slice(-200).map(e => `<div class="e ${e.cls}">${esc(e.text)}</div>`).join("");
+  const lv = $("logView"); lv.scrollTop = lv.scrollHeight;
+
+  // buttons
+  $("stepBtn").disabled = cpu.halted;
+  $("finishBtn").disabled = cpu.halted;
+}
+
+function renderHex() {
+  const len = asm.code.length;
+  const end = Math.min(MEM_SIZE, Math.ceil(len / 16) * 16 + 16);
+  let html = "";
+  for (let row = 0; row < end; row += 16) {
+    let cells = "";
+    for (let i = 0; i < 16; i++) {
+      const a = row + i;
+      let b = cpu.mem[a].toString(16).padStart(2, "0");
+      if (a === cpu.pc || a === cpu.pc+1 || a===cpu.pc+2 || a===cpu.pc+3 ||
+          a===cpu.pc+4 || a===cpu.pc+5 || a===cpu.pc+6 || a===cpu.pc+7) b = `<b class="pc">${b}</b>`;
+      else if (a === cpu.sp || a===cpu.sp+1 || a===cpu.sp+2 || a===cpu.sp+3) b = `<b class="sp">${b}</b>`;
+      cells += b + " ";
+    }
+    html += `<div><span class="addr">${row.toString(16).padStart(4,"0")}</span>  ${cells}</div>`;
+  }
+  $("hexView").innerHTML = html;
+}
+
+function renderTimeline() {
+  const colorFor = t => t === "A" ? "var(--taskA)" : t === "B" ? "var(--taskB)" : "var(--kernel)";
+  const tv = $("timelineView");
+  // Downsample if very long to keep DOM light
+  const samples = timeline;
+  const max = 2400;
+  let arr = samples;
+  if (samples.length > max) { arr = []; const stride = samples.length / max; for (let i = 0; i < max; i++) arr.push(samples[Math.floor(i*stride)]); }
+  tv.innerHTML = arr.map(t => `<div class="seg" style="background:${colorFor(t)}"></div>`).join("");
+  tv.scrollLeft = tv.scrollWidth;
+}
+
+/* ---- wire up ---- */
+$("stepBtn").addEventListener("click", stepOnce);
+$("runBtn").addEventListener("click", toggleRun);
+$("finishBtn").addEventListener("click", runToCompletion);
+$("resetBtn").addEventListener("click", reset);
+$("timer").addEventListener("input", e => { timerPeriod = parseInt(e.target.value, 10); $("timerVal").textContent = timerPeriod; reset(); });
+
+// Self-check against the Rust engine ground truth, shown in the header.
+function selfCheck() {
+  const c = new Cpu();
+  const a = assemble(KERNEL_SRC);
+  c.loadImage(a.origin, a.code); c.pc = a.origin; c.setTimer(DEFAULT_TIMER);
+  const curAddr = a.labels["cur_task"];
+  let last = c.readWord(curAddr), timers = 0, traps = 0, sw = 0;
+  while (c.cycles < MAX_CYCLES) {
+    const ev = c.step();
+    const ct = c.readWord(curAddr);
+    if (ev.kind === "timer") timers++;
+    else if (ev.kind === "trap") traps++;
+    if (ct !== last) { sw++; last = ct; }
+    if (ev.kind === "halted") break;
+  }
+  const out = c.output.map(b => String.fromCharCode(b)).join("");
+  const ok = out === "ABBABABABABA" && c.cycles === 2082 && timers === 24 && traps === 14 && sw === 24 && c.halted;
+  const res = { out, cycles: c.cycles, timers, traps, sw, halted: c.halted, ok };
+  window.__bedrockSelfCheck = res;
+  $("verifyline").textContent = ok
+    ? `verified vs Rust engine: "${out}", ${c.cycles} cycles, ${timers} timer irqs, ${traps} traps, ${sw} switches ✓`
+    : `self-check MISMATCH: ${JSON.stringify(res)}`;
+  return res;
+}
+
+reset();
+selfCheck();
+</script>
 </body>
 </html>
