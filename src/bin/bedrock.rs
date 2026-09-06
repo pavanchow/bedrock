@@ -1,5 +1,16 @@
 //! The Bedrock command line tool: assemble, run, disassemble, and the kernel demo.
+#![warn(clippy::pedantic)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::too_many_lines,
+    clippy::wildcard_imports,
+    clippy::enum_glob_use
+)]
 
+use std::fmt::Write;
 use std::process::ExitCode;
 
 use bedrock::assembler::assemble;
@@ -69,12 +80,9 @@ fn cmd_run(args: &[String]) -> Result<(), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
     let asm = assemble(&src)?;
 
-    let timer: u64 = flag_value(args, "--timer")
-        .map(|v| v.parse().unwrap_or(0))
-        .unwrap_or(0);
-    let cycles: u64 = flag_value(args, "--cycles")
-        .map(|v| v.parse().unwrap_or(100_000))
-        .unwrap_or(100_000);
+    let timer: u64 = flag_value(args, "--timer").map_or(0, |v| v.parse().unwrap_or(0));
+    let cycles: u64 =
+        flag_value(args, "--cycles").map_or(100_000, |v| v.parse().unwrap_or(100_000));
     let trace = has_flag(args, "--trace");
 
     let mut cpu = Cpu::new();
@@ -89,7 +97,7 @@ fn cmd_run(args: &[String]) -> Result<(), String> {
         let event = cpu.step(None);
         if trace {
             let instr = decode_at(&cpu, pc);
-            let text = instr.map(disasm_instr).unwrap_or_else(|| "?".to_string());
+            let text = instr.map_or_else(|| "?".to_string(), disasm_instr);
             println!(
                 "{:5}  {:04x}  {:<22}  {}",
                 cpu.cycles,
@@ -123,6 +131,7 @@ fn describe(event: &StepEvent) -> String {
         StepEvent::TimerInterrupt => "-> TIMER".to_string(),
         StepEvent::Trap(n) => format!("-> TRAP {n}"),
         StepEvent::Fault(c) => format!("-> FAULT {c:?}"),
+        StepEvent::DoubleFault => "-> DOUBLEFAULT".to_string(),
         StepEvent::Halted => "HALT".to_string(),
     }
 }
@@ -133,7 +142,7 @@ fn print_state(cpu: &Cpu) {
         let mut line = String::new();
         for col in 0..4 {
             let i = row * 4 + col;
-            line.push_str(&format!("r{i}={:#010x}  ", cpu.regs[i]));
+            let _ = write!(line, "r{i}={:#010x}  ", cpu.regs[i]);
         }
         println!("{}", line.trim_end());
     }

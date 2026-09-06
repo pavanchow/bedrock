@@ -29,7 +29,8 @@ impl Default for RunConfig {
 }
 
 impl RunConfig {
-    /// Apply the BEDROCK_CYCLES environment override, if set.
+    /// Apply the `BEDROCK_CYCLES` environment override, if set.
+    #[must_use]
     pub fn with_env(mut self) -> Self {
         if let Ok(v) = std::env::var("BEDROCK_CYCLES") {
             if let Ok(n) = v.parse::<u64>() {
@@ -117,7 +118,7 @@ pub fn run_kernel(cfg: &RunConfig) -> KernelReport {
         match &event {
             StepEvent::TimerInterrupt => report.timer_interrupts += 1,
             StepEvent::Trap(_) => report.traps += 1,
-            StepEvent::Halted => {
+            StepEvent::Halted | StepEvent::DoubleFault => {
                 report.halted = true;
             }
             _ => {}
@@ -135,7 +136,7 @@ pub fn run_kernel(cfg: &RunConfig) -> KernelReport {
                 event: describe(&event),
             });
         }
-        if matches!(event, StepEvent::Halted) {
+        if matches!(event, StepEvent::Halted | StepEvent::DoubleFault) {
             break;
         }
     }
@@ -152,6 +153,7 @@ fn describe(event: &StepEvent) -> String {
         StepEvent::TimerInterrupt => "TIMER".to_string(),
         StepEvent::Trap(n) => format!("TRAP {n}"),
         StepEvent::Fault(c) => format!("FAULT {c:?}"),
+        StepEvent::DoubleFault => "DOUBLEFAULT".to_string(),
         StepEvent::Halted => "HALT".to_string(),
     }
 }

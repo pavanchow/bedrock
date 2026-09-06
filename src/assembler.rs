@@ -48,6 +48,11 @@ pub fn assemble(src: &str) -> Result<Assembled, String> {
     let mut consts: HashMap<String, u32> = HashMap::new();
     let mut parsed: Vec<Parsed> = Vec::new();
     let mut addr: u32 = 0;
+    // Lowest and highest byte addresses touched by emitted items. Tracked
+    // explicitly so a `.org` that jumps backwards cannot underflow the offset
+    // math in pass 2 and a `.space`/`.org` cannot grow the image past memory.
+    let mut lo: u32 = u32::MAX;
+    let mut hi: u32 = 0;
 
     // Pass 1: assign addresses, collect labels and constants.
     for (idx, raw) in src.lines().enumerate() {
@@ -87,6 +92,11 @@ pub fn assemble(src: &str) -> Result<Assembled, String> {
             match dir {
                 "org" => {
                     addr = eval_now(&toks.join(""), &consts, line_no)?;
+                    if addr as usize > MEM_SIZE {
+                        return Err(format!(
+                            "line {line_no}: .org past {MEM_SIZE}-byte memory"
+                        ));
+                    }
                 }
                 "equ" => {
                     if toks.len() < 2 {
@@ -98,42 +108,52 @@ pub fn assemble(src: &str) -> Result<Assembled, String> {
                 }
                 "word" => {
                     let items = split_commas(&toks.join(" "));
-                    let n = items.len() as u32;
+                    let delta = (items.len() as u32)
+                        .checked_mul(4)
+                        .ok_or_else(|| format!("line {line_no}: .word list too large"))?;
+                    lo = lo.min(addr);
                     parsed.push(Parsed {
                         line_no,
                         addr,
                         kind: Kind::Word(items),
                     });
-                    addr += 4 * n;
+                    addr = advance(addr, delta, line_no)?;
+                    hi = hi.max(addr);
                 }
                 "byte" => {
                     let items = split_commas(&toks.join(" "));
                     let n = items.len() as u32;
+                    lo = lo.min(addr);
                     parsed.push(Parsed {
                         line_no,
                         addr,
                         kind: Kind::Byte(items),
                     });
-                    addr += n;
+                    addr = advance(addr, n, line_no)?;
+                    hi = hi.max(addr);
                 }
                 "string" => {
                     let bytes = parse_string(rest, line_no)?;
                     let n = bytes.len() as u32;
+                    lo = lo.min(addr);
                     parsed.push(Parsed {
                         line_no,
                         addr,
                         kind: Kind::Str(bytes),
                     });
-                    addr += n;
+                    addr = advance(addr, n, line_no)?;
+                    hi = hi.max(addr);
                 }
                 "space" => {
                     let n = eval_now(&toks.join(""), &consts, line_no)?;
+                    lo = lo.min(addr);
                     parsed.push(Parsed {
                         line_no,
                         addr,
                         kind: Kind::Space,
                     });
-                    addr += n;
+                    addr = advance(addr, n, line_no)?;
+                    hi = hi.max(addr);
                 }
                 other => return Err(format!("line {line_no}: unknown directive .{other}")),
             }
@@ -143,20 +163,18 @@ pub fn assemble(src: &str) -> Result<Assembled, String> {
         let op = Op::from_mnemonic(&head)
             .ok_or_else(|| format!("line {line_no}: unknown mnemonic '{head}'"))?;
         let operands = split_commas(&toks.join(" "));
+        lo = lo.min(addr);
         parsed.push(Parsed {
             line_no,
             addr,
             kind: Kind::Instr { op, operands },
         });
-        addr += INSTR_SIZE;
+        addr = advance(addr, INSTR_SIZE, line_no)?;
+        hi = hi.max(addr);
     }
 
-    let origin = parsed.first().map(|p| p.addr).unwrap_or(0);
-    let end = addr;
-    if end < origin {
-        return Err("assembled image ends before its origin".to_string());
-    }
-    let mut code = vec![0u8; (end - origin) as usize];
+    let origin = if parsed.is_empty() { 0 } else { lo };
+    let mut code = vec![0u8; hi.saturating_sub(origin) as usize];
 
     // Pass 2: emit bytes with all labels resolved.
     let resolve = |tok: &str, line_no: usize| -> Result<u32, String> {
@@ -194,6 +212,20 @@ pub fn assemble(src: &str) -> Result<Assembled, String> {
         code,
         labels,
     })
+}
+
+/// Advance an assembly address by `delta` bytes, rejecting overflow and any
+/// growth beyond the emulated memory so the image can never exceed 64 KiB.
+fn advance(addr: u32, delta: u32, line_no: usize) -> Result<u32, String> {
+    let next = addr
+        .checked_add(delta)
+        .ok_or_else(|| format!("line {line_no}: address overflow"))?;
+    if next as usize > MEM_SIZE {
+        return Err(format!(
+            "line {line_no}: image would exceed {MEM_SIZE}-byte memory"
+        ));
+    }
+    Ok(next)
 }
 
 fn encode_instr(
@@ -426,10 +458,10 @@ fn parse_mem(
     if let Some(pos) = inner.find(['+', '-']) {
         let rb = parse_reg(inner[..pos].trim())
             .ok_or_else(|| format!("line {line_no}: bad base register in '{s}'"))?;
-        let sign = &inner[pos..pos + 1];
+        let negative = inner.as_bytes()[pos] == b'-';
         let rest = inner[pos + 1..].trim();
         let mag = eval_expr(rest, labels, consts, line_no)?;
-        let disp = if sign == "-" { 0u32.wrapping_sub(mag) } else { mag };
+        let disp = if negative { 0u32.wrapping_sub(mag) } else { mag };
         Ok((rb, disp))
     } else {
         let rb = parse_reg(inner.trim())

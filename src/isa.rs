@@ -139,6 +139,10 @@ pub enum Op {
     Halt = 0x31,
     Spget = 0x32,
     Spset = 0x33,
+    Div = 0x34,
+    Divi = 0x35,
+    Rem = 0x36,
+    Remi = 0x37,
 }
 
 /// How an opcode's textual operands map onto the encoded fields. Used by both
@@ -226,6 +230,10 @@ impl Op {
             0x31 => Halt,
             0x32 => Spget,
             0x33 => Spset,
+            0x34 => Div,
+            0x35 => Divi,
+            0x36 => Rem,
+            0x37 => Remi,
             _ => return None,
         };
         Some(op)
@@ -287,6 +295,10 @@ impl Op {
             Halt => "halt",
             Spget => "spget",
             Spset => "spset",
+            Div => "div",
+            Divi => "divi",
+            Rem => "rem",
+            Remi => "remi",
         }
     }
 
@@ -347,6 +359,10 @@ impl Op {
             "halt" => Halt,
             "spget" => Spget,
             "spset" => Spset,
+            "div" => Div,
+            "divi" => Divi,
+            "rem" => Rem,
+            "remi" => Remi,
             _ => return None,
         };
         Some(op)
@@ -357,8 +373,8 @@ impl Op {
         use Op::*;
         match self {
             Nop | Ret | Sti | Cli | Iret | Halt => Form::None,
-            Add | Sub | Mul | And | Or | Xor | Shl | Shr => Form::Rrr,
-            Addi | Subi | Muli | Andi | Ori | Xori | Shli | Shri => Form::Rri,
+            Add | Sub | Mul | And | Or | Xor | Shl | Shr | Div | Rem => Form::Rrr,
+            Addi | Subi | Muli | Andi | Ori | Xori | Shli | Shri | Divi | Remi => Form::Rri,
             Mov | Not | Neg => Form::Rr,
             Movi => Form::Ri,
             Cmp => Form::Rr2,
@@ -445,7 +461,7 @@ mod tests {
 
     #[test]
     fn mnemonic_roundtrip() {
-        for b in 0u8..=0x33 {
+        for b in 0u8..=0x37 {
             if let Some(op) = Op::from_u8(b) {
                 assert_eq!(Op::from_mnemonic(op.mnemonic()), Some(op));
             }

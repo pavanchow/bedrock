@@ -79,6 +79,10 @@ fn disasm_assemble_roundtrip_is_stable() {
         add r2, r0, r1\n\
         addi r2, r2, 5\n\
         sub r3, r2, r0\n\
+        div r4, r1, r0\n\
+        divi r4, r1, 3\n\
+        rem r5, r1, r0\n\
+        remi r5, r1, 7\n\
         and r4, r0, r1\n\
         shli r5, r0, 2\n\
         not r6, r0\n\

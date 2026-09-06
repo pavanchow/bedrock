@@ -11,6 +11,8 @@ pub enum FaultCode {
     Memory = 2,
     /// An undecodable opcode was fetched.
     BadOpcode = 3,
+    /// A DIV or REM by zero was attempted.
+    DivideByZero = 4,
 }
 
 /// What happened during a single `step`.
@@ -24,6 +26,10 @@ pub enum StepEvent {
     Trap(u32),
     /// A fault entered the fault handler.
     Fault(FaultCode),
+    /// A fault could not be delivered because the vector table or the kernel
+    /// stack is itself unusable. The machine halts rather than recursing or
+    /// touching host memory out of bounds.
+    DoubleFault,
     /// The machine executed HALT.
     Halted,
 }
@@ -101,32 +107,59 @@ impl Cpu {
         self.mem[a..a + 4].copy_from_slice(&val.to_le_bytes());
     }
 
-    fn push(&mut self, val: u32) {
-        self.sp = self.sp.wrapping_sub(4);
-        self.write_word(self.sp, val);
+    /// Push a word, faulting cleanly if the stack pointer leaves memory.
+    fn try_push(&mut self, val: u32) -> Result<(), ()> {
+        let sp = self.sp.wrapping_sub(4);
+        if !self.in_bounds(sp, 4) {
+            return Err(());
+        }
+        self.sp = sp;
+        self.write_word(sp, val);
+        Ok(())
     }
 
-    fn pop(&mut self) -> u32 {
+    /// Pop a word, faulting cleanly if the stack pointer is out of memory.
+    fn try_pop(&mut self) -> Result<u32, ()> {
+        if !self.in_bounds(self.sp, 4) {
+            return Err(());
+        }
         let v = self.read_word(self.sp);
         self.sp = self.sp.wrapping_add(4);
-        v
+        Ok(v)
     }
 
     // ---- interrupt delivery --------------------------------------------
 
     /// Push the interrupt frame (flags then pc), enter kernel mode with
-    /// interrupts masked, and jump through vector `index`.
-    fn enter_vector(&mut self, index: u32) {
-        self.push(self.flags.to_u32());
-        self.push(self.pc);
+    /// interrupts masked, and jump through vector `index`. Returns `Err` if the
+    /// vector table entry or the two stack slots fall outside memory, so the
+    /// caller can escalate to a double fault instead of touching host memory.
+    fn try_enter_vector(&mut self, index: u32) -> Result<(), ()> {
+        let vec_addr = self.ivt_base.wrapping_add(index.wrapping_mul(4));
+        if !self.in_bounds(vec_addr, 4) {
+            return Err(());
+        }
+        let sp1 = self.sp.wrapping_sub(4);
+        let sp2 = sp1.wrapping_sub(4);
+        if !self.in_bounds(sp1, 4) || !self.in_bounds(sp2, 4) {
+            return Err(());
+        }
+        let target = self.read_word(vec_addr);
+        self.sp = sp2;
+        self.write_word(sp1, self.flags.to_u32());
+        self.write_word(sp2, self.pc);
         self.flags.user = false;
         self.flags.ie = false;
-        self.pc = self.read_word(self.ivt_base + index * 4);
+        self.pc = target;
+        Ok(())
     }
 
     fn fault(&mut self, code: FaultCode) -> StepEvent {
         self.regs[7] = code as u32;
-        self.enter_vector(VEC_FAULT);
+        if self.try_enter_vector(VEC_FAULT).is_err() {
+            self.halted = true;
+            return StepEvent::DoubleFault;
+        }
         StepEvent::Fault(code)
     }
 
@@ -135,14 +168,19 @@ impl Cpu {
     /// Execute one instruction (or deliver one pending interrupt). The
     /// optional `syscall` hook is consulted on TRAP before the kernel vector.
     pub fn step(&mut self, syscall: Option<&mut Syscall>) -> StepEvent {
+        use Op::*;
+
         if self.halted {
             return StepEvent::Halted;
         }
 
         // A due timer interrupt preempts the next instruction.
         if self.timer_period != 0 && self.flags.ie && self.cycles >= self.next_timer {
-            self.next_timer = self.cycles + self.timer_period;
-            self.enter_vector(VEC_TIMER);
+            self.next_timer = self.cycles.wrapping_add(self.timer_period);
+            if self.try_enter_vector(VEC_TIMER).is_err() {
+                self.halted = true;
+                return StepEvent::DoubleFault;
+            }
             return StepEvent::TimerInterrupt;
         }
 
@@ -153,9 +191,8 @@ impl Cpu {
         let base = self.pc as usize;
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(&self.mem[base..base + 8]);
-        let instr = match Instr::decode(bytes) {
-            Some(i) => i,
-            None => return self.fault(FaultCode::BadOpcode),
+        let Some(instr) = Instr::decode(bytes) else {
+            return self.fault(FaultCode::BadOpcode);
         };
 
         if instr.op.is_privileged() && self.flags.user {
@@ -171,7 +208,6 @@ impl Cpu {
         let b = (instr.b & 0x07) as usize;
         let c = (instr.c & 0x07) as usize;
 
-        use Op::*;
         match instr.op {
             Nop => {}
             Mov => self.regs[a] = self.regs[b],
@@ -194,6 +230,30 @@ impl Cpu {
             Shri => self.regs[a] = self.alu_bit(self.regs[b].wrapping_shr(instr.imm)),
             Not => self.regs[a] = self.alu_bit(!self.regs[b]),
             Neg => self.regs[a] = self.alu_sub(0, self.regs[b]),
+            Div => {
+                if self.regs[c] == 0 {
+                    return self.fault(FaultCode::DivideByZero);
+                }
+                self.regs[a] = self.alu_bit(self.regs[b] / self.regs[c]);
+            }
+            Divi => {
+                if instr.imm == 0 {
+                    return self.fault(FaultCode::DivideByZero);
+                }
+                self.regs[a] = self.alu_bit(self.regs[b] / instr.imm);
+            }
+            Rem => {
+                if self.regs[c] == 0 {
+                    return self.fault(FaultCode::DivideByZero);
+                }
+                self.regs[a] = self.alu_bit(self.regs[b] % self.regs[c]);
+            }
+            Remi => {
+                if instr.imm == 0 {
+                    return self.fault(FaultCode::DivideByZero);
+                }
+                self.regs[a] = self.alu_bit(self.regs[b] % instr.imm);
+            }
             Cmp => {
                 let _ = self.alu_sub(self.regs[a], self.regs[b]);
             }
@@ -244,19 +304,37 @@ impl Cpu {
             Jge => self.branch(self.flags.sf == self.flags.of, instr.imm),
             Jle => self.branch(self.flags.zf || (self.flags.sf != self.flags.of), instr.imm),
             Jgt => self.branch(!self.flags.zf && (self.flags.sf == self.flags.of), instr.imm),
-            Push => self.push(self.regs[a]),
-            Pop => self.regs[a] = self.pop(),
+            Push => {
+                if self.try_push(self.regs[a]).is_err() {
+                    return self.fault(FaultCode::Memory);
+                }
+            }
+            Pop => match self.try_pop() {
+                Ok(v) => self.regs[a] = v,
+                Err(()) => return self.fault(FaultCode::Memory),
+            },
             Call => {
-                self.push(self.pc);
+                if self.try_push(self.pc).is_err() {
+                    return self.fault(FaultCode::Memory);
+                }
                 self.pc = instr.imm;
             }
-            Ret => self.pc = self.pop(),
+            Ret => match self.try_pop() {
+                Ok(v) => self.pc = v,
+                Err(()) => return self.fault(FaultCode::Memory),
+            },
             Lidt => self.ivt_base = instr.imm,
             Sti => self.flags.ie = true,
             Cli => self.flags.ie = false,
             Iret => {
-                self.pc = self.pop();
-                self.flags = Flags::from_u32(self.pop());
+                let Ok(pc) = self.try_pop() else {
+                    return self.fault(FaultCode::Memory);
+                };
+                let Ok(flags) = self.try_pop() else {
+                    return self.fault(FaultCode::Memory);
+                };
+                self.pc = pc;
+                self.flags = Flags::from_u32(flags);
             }
             Trap => {
                 if let Some(cb) = syscall {
@@ -265,7 +343,10 @@ impl Cpu {
                     }
                 }
                 self.regs[6] = instr.imm;
-                self.enter_vector(VEC_SYSCALL);
+                if self.try_enter_vector(VEC_SYSCALL).is_err() {
+                    self.halted = true;
+                    return StepEvent::DoubleFault;
+                }
                 return StepEvent::Trap(instr.imm);
             }
             Halt => {
