@@ -51,7 +51,8 @@ discriminant, so a decoded opcode always re-encodes to the same byte.
 
 Arithmetic and logic come in a register-register form such as `add rd, ra, rb`
 and a register-immediate form such as `addi rd, ra, imm`. The set covers add,
-subtract, multiply, and, or, xor, shift left, shift right, not, and negate.
+subtract, multiply, unsigned divide, unsigned remainder, and, or, xor, shift
+left, shift right, not, and negate.
 
 Flag rules:
 
@@ -60,6 +61,9 @@ Flag rules:
   when read as unsigned, and set overflow on signed overflow.
 - Multiply sets carry and overflow together when the product does not fit in 32
   bits.
+- Divide and remainder are unsigned. They clear carry and overflow. A divisor of
+  zero raises a divide-by-zero fault through the fault vector and writes no
+  result.
 - The logical and shift operations clear carry and overflow.
 - All of them set zero from the result and sign from bit 31.
 
@@ -97,6 +101,17 @@ current program counter, then switches to kernel mode, clears the interrupt
 enable bit, and loads `pc` from the vector. Pushing flags before pc means the
 saved frame reads, from the top of the stack downward, as pc then flags.
 
+A fault is raised for a memory access outside the 64 KiB, an undecodable opcode,
+a privileged instruction in user mode, and a divide by zero. The fault code is
+written to `r7` and delivered through the fault vector. Because delivery itself
+pushes a frame and reads the vector table, it can only touch memory that is in
+range. If the stack pointer or the vector base has been driven out of range so
+the frame cannot be pushed or the vector cannot be read, the fault cannot be
+delivered. Rather than recurse or index host memory out of bounds, the machine
+raises a double fault and halts. This is what keeps the emulator a real sandbox:
+no guest program, however malformed, can panic the host or reach outside the
+emulated memory.
+
 `iret` reverses exactly that. It pops the program counter, then pops the flags.
 Because the mode bit and the interrupt enable bit are part of the flags word,
 `iret` restores the caller's mode and re-enables interrupts in one step. Clearing
@@ -123,6 +138,14 @@ It understands `.org` to set the location, `.word` and `.byte` to place data,
 constant. Memory operands are `[rb]`, `[rb + imm]`, and `[rb - imm]`. Immediates
 can be decimal, hex with `0x`, binary with `0b`, a character literal, or a label
 or constant with an optional offset such as `base + 8`.
+
+The assembler is bounded so a malformed source can never exhaust host memory or
+overflow its address arithmetic. Every address advance is checked for overflow
+and rejected if it would grow the image past the 64 KiB memory, so a `.space`
+directive asking for gigabytes returns a clean error rather than allocating. The
+image origin is the lowest address any item touches, so a `.org` that jumps
+backward is handled without underflowing the offset math. The origin, the code
+size, and the load address therefore always stay inside the emulated memory.
 
 The disassembler is the inverse and shares the operand-form table with the
 assembler, so the two cannot drift apart.
@@ -177,12 +200,15 @@ interleaves. A trace of a run shows the pattern clearly:
 Gate one, instruction semantics. Each representative case fixes inputs and
 asserts the resulting registers and flags against values worked out by hand,
 including the unsigned carry edge, the signed overflow edge, and taken and
-not-taken branches. The seeded fuzz recomputes add and subtract results, carry,
-and overflow with a widening 64-bit reference that shares no code with the CPU,
-so agreement across thousands of random inputs is real evidence, not a tautology.
-The assembler byte tests pin the encoding, and the round-trip test assembles the
-disassembly of an image and checks the bytes are unchanged, which can only hold
-if the encoder, the decoder, and both text directions all agree.
+not-taken branches. The seeded differential fuzz recomputes the result and every
+flag for each arithmetic, logic, and shift opcode, in both the register-register
+and register-immediate forms, with a reference that shares no code with the CPU,
+so agreement across many thousands of adversarial inputs is real evidence, not a
+tautology. Divide and remainder are checked the same way, and a separate case
+proves a zero divisor faults instead of computing. The assembler byte tests pin
+the encoding, and the round-trip test assembles the disassembly of an image and
+checks the bytes are unchanged, which can only hold if the encoder, the decoder,
+and both text directions all agree.
 
 Gate two, interrupts and traps. The timer test snapshots every register, the
 flags, the stack pointer, and the program counter at the instant before the timer
@@ -203,3 +229,18 @@ by the timer, and they count the traps to confirm every print and exit went
 through the trap handler. Finally they run the kernel twice and assert identical
 output, identical cycle count, and an identical state fingerprint, which is the
 determinism claim stated as an equality the machine either meets or fails.
+
+Gate four, adversarial stress. This gate proves the emulator is a sandbox rather
+than a happy-path interpreter. It fuzzes fully randomized machines, memory filled
+with a mix of valid and invalid opcodes, wild stack pointers, vector bases, and
+program counters, in both user and kernel mode, and runs each for a fixed step
+budget. It runs targeted programs for each documented host-panic candidate: a
+stack pointer driven out of range before a push, a vector base past memory before
+a trap, an out-of-bounds load, a return through a broken stack, a privileged
+instruction in user mode, and an unbounded self-jump. It fuzzes malformed
+assembly text built from a soup of mnemonics, junk tokens, bad registers, and
+unterminated operands, and it pins the oversized and overflowing directive cases
+to clean errors. The single claim across all of it is that the host never
+panics, never hangs, and never touches memory out of bounds. The step budget is
+the hang guard and the assembler bounds are the allocation guard, so the gate is
+an equality the machine either meets or fails, at any `BEDROCK_FUZZ_OPS` scale.

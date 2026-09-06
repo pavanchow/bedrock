@@ -71,8 +71,8 @@ bytes, and a 32-bit little-endian immediate.
 | Group | Instructions |
 | --- | --- |
 | Move | `mov`, `movi` |
-| Arithmetic and logic (reg-reg) | `add`, `sub`, `mul`, `and`, `or`, `xor`, `shl`, `shr`, `not`, `neg` |
-| Arithmetic and logic (reg-imm) | `addi`, `subi`, `muli`, `andi`, `ori`, `xori`, `shli`, `shri` |
+| Arithmetic and logic (reg-reg) | `add`, `sub`, `mul`, `div`, `rem`, `and`, `or`, `xor`, `shl`, `shr`, `not`, `neg` |
+| Arithmetic and logic (reg-imm) | `addi`, `subi`, `muli`, `divi`, `remi`, `andi`, `ori`, `xori`, `shli`, `shri` |
 | Compare | `cmp`, `cmpi` |
 | Memory | `load`, `store`, `loadb`, `storeb` |
 | Branch | `jmp`, `jz`/`jeq`, `jnz`/`jne`, `jc`, `jnc`, `js`, `jns`, `jo`, `jno`, `jlt`, `jge`, `jle`, `jgt` |
@@ -85,9 +85,25 @@ The assembler understands labels, the directives `.org`, `.word`, `.byte`,
 `[rb + imm]`, and `[rb - imm]`, and immediates written in decimal, hex, binary,
 as a character literal, or as a label with an offset.
 
+`div` and `rem` are unsigned. A divide or remainder by zero raises a fault
+through the fault vector rather than doing anything undefined.
+
 Privileged instructions attempted in user mode raise a fault through the fault
 vector. A trap switches to kernel mode and jumps through the syscall vector,
 which is how a user task asks the kernel to print, yield, or exit.
+
+## Memory safety of the guest
+
+The emulator is a sandbox. Nothing a guest program does can panic the host or
+touch memory outside the emulated 64 KiB. A load or store outside memory, a bad
+opcode, a privileged instruction in user mode, and a divide by zero all raise a
+clean guest fault through the fault vector. A stack pointer or vector base driven
+out of range faults too, and if the fault itself cannot be delivered because the
+kernel stack or the vector table is unusable, the machine raises a double fault
+and halts instead of recursing or reading out of bounds. The assembler is
+bounded the same way. It rejects any program whose addresses overflow or whose
+image would grow past the 64 KiB memory, so a malformed source file returns a
+clean error instead of allocating without limit.
 
 ## The correctness gate
 
@@ -96,10 +112,12 @@ tunable with `BEDROCK_FUZZ_OPS` and `BEDROCK_CYCLES`.
 
 1. Instruction semantics. Each instruction's effect on registers, memory, and
    flags is checked against a hand-specified reference, including carry,
-   overflow, and branch edge cases. A seeded differential fuzz compares add and
-   subtract results and flags against an independent widening reference. The
-   assembler emits the expected bytes for known snippets, and
-   `assemble(disassemble(assemble(x)))` reproduces the exact bytes.
+   overflow, and branch edge cases. A seeded differential fuzz compares every
+   arithmetic, logic, and shift opcode, in both register-register and
+   register-immediate forms, value and every flag, against an independent
+   reference over adversarial operands. The assembler emits the expected bytes
+   for known snippets, and `assemble(disassemble(assemble(x)))` reproduces the
+   exact bytes.
 2. Interrupts and traps. The timer transfers control through the vector table
    and `iret` restores the interrupted registers, flags, stack pointer, and
    program counter exactly. A privileged instruction faults in user mode but not
@@ -108,7 +126,15 @@ tunable with `BEDROCK_FUZZ_OPS` and `BEDROCK_CYCLES`.
    across multiple time slices, context switches happen via the timer, syscalls
    are dispatched through the trap handler, and the run is deterministic: the
    same configuration yields an identical trace and final state.
+4. Adversarial stress. Random and malformed instruction streams, wild stack
+   pointers, vector bases, and program counters, out-of-bounds memory access,
+   privileged ops in user mode, near-infinite loops, and malformed assembly text
+   are fuzzed against the emulator and the assembler. The gate is that none of it
+   panics the host, hangs it, or reads or writes out of bounds. Every illegal
+   act resolves to a clean guest fault, a double fault that halts, or a clean
+   assembler error. A bounded cycle budget guarantees every run terminates.
 
-Run it all with `cargo test`. See [DESIGN.md](DESIGN.md) for the full ISA, the
-interrupt and trap model, the scheduler written in assembly, and why each gate
-proves its claim.
+Run it all with `cargo test`. The fuzzing gates scale with `BEDROCK_FUZZ_OPS`
+and the kernel cycle budget with `BEDROCK_CYCLES`. See [DESIGN.md](DESIGN.md) for
+the full ISA, the interrupt and trap model, the scheduler written in assembly,
+and why each gate proves its claim.
