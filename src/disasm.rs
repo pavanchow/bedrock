@@ -1,5 +1,8 @@
 //! Turn machine code back into Bedrock assembly text.
 
+use std::cmp::Ordering;
+use std::fmt::Write;
+
 use crate::isa::*;
 
 /// Disassemble a single instruction word into a text line (no trailing newline).
@@ -13,18 +16,14 @@ pub fn disasm_instr(instr: Instr) -> String {
         Form::None => m.to_string(),
         Form::Rrr => format!("{m} r{a}, r{b}, r{c}"),
         Form::Rri => format!("{m} r{a}, r{b}, {imm}"),
-        Form::Rr => format!("{m} r{a}, r{b}"),
-        Form::Ri => format!("{m} r{a}, {imm}"),
-        Form::Rr2 => format!("{m} r{a}, r{b}"),
-        Form::Ri2 => format!("{m} r{a}, {imm}"),
+        Form::Rr | Form::Rr2 => format!("{m} r{a}, r{b}"),
+        Form::Ri | Form::Ri2 => format!("{m} r{a}, {imm}"),
         Form::MemLoad | Form::MemStore => {
             let d = imm as i32;
-            if d == 0 {
-                format!("{m} r{a}, [r{b}]")
-            } else if d < 0 {
-                format!("{m} r{a}, [r{b} - {}]", -(d as i64))
-            } else {
-                format!("{m} r{a}, [r{b} + {d}]")
+            match d.cmp(&0) {
+                Ordering::Equal => format!("{m} r{a}, [r{b}]"),
+                Ordering::Less => format!("{m} r{a}, [r{b} - {}]", -(d as i64)),
+                Ordering::Greater => format!("{m} r{a}, [r{b} + {d}]"),
             }
         }
         Form::Reg => format!("{m} r{a}"),
@@ -41,17 +40,14 @@ pub fn disasm_source(image: &[u8], origin: u32) -> String {
     while off + 8 <= image.len() {
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(&image[off..off + 8]);
-        match Instr::decode(bytes) {
-            Some(instr) => {
-                out.push_str(&disasm_instr(instr));
-                out.push('\n');
-                off += 8;
-            }
-            None => {
-                let w = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-                out.push_str(&format!(".word {w}\n"));
-                off += 4;
-            }
+        if let Some(instr) = Instr::decode(bytes) {
+            out.push_str(&disasm_instr(instr));
+            out.push('\n');
+            off += 8;
+        } else {
+            let w = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            let _ = writeln!(out, ".word {w}");
+            off += 4;
         }
     }
     out
@@ -66,16 +62,13 @@ pub fn disasm(image: &[u8], origin: u32) -> String {
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(&image[off..off + 8]);
         let addr = origin + off as u32;
-        match Instr::decode(bytes) {
-            Some(instr) => {
-                out.push_str(&format!("{:04x}: {}\n", addr, disasm_instr(instr)));
-                off += 8;
-            }
-            None => {
-                let w = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-                out.push_str(&format!("{addr:04x}: .word {w}\n"));
-                off += 4;
-            }
+        if let Some(instr) = Instr::decode(bytes) {
+            let _ = writeln!(out, "{:04x}: {}", addr, disasm_instr(instr));
+            off += 8;
+        } else {
+            let w = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            let _ = writeln!(out, "{addr:04x}: .word {w}");
+            off += 4;
         }
     }
     out

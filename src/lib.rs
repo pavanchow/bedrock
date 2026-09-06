@@ -1,3 +1,27 @@
+#![warn(clippy::pedantic)]
+// An emulator lives on narrowing and wrapping integer casts between guest and
+// host widths, and its long dispatch functions are inherently large. These
+// pedantic lints fight that domain, so they are turned off crate-wide while the
+// rest of the pedantic set stays on.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::must_use_candidate,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::module_name_repetitions,
+    clippy::too_many_lines,
+    clippy::wildcard_imports,
+    clippy::struct_excessive_bools,
+    clippy::unreadable_literal,
+    clippy::similar_names,
+    clippy::many_single_char_names,
+    clippy::match_same_arms,
+    clippy::enum_glob_use
+)]
+
 //! # Bedrock
 //!
 //! Bedrock is a from-scratch virtual machine with its own instruction set, an
