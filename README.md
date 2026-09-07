@@ -1,3 +1,5 @@
+<img src="docs/logo.svg" alt="Bedrock logo" width="96">
+
 # Bedrock
 
 A from-scratch virtual CPU, an assembler for it, and a small operating system
