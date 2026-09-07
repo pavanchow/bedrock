@@ -3,8 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bedrock — interactive CPU &amp; kernel playground</title>
+<title>Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust</title>
+<meta name="description" content="Bedrock by Pavan Nallamothu: a virtual CPU, an assembler for its instruction set, and a small operating system kernel written in that assembly. Boot the kernel in your browser, single-step the ISA, and watch two user tasks time-slice on a timer interrupt.">
+<meta name="author" content="Pavan Nallamothu (pavanchow)">
+<link rel="canonical" href="https://pavanchow.github.io/bedrock/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="author" href="https://github.com/pavanchow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust">
+<meta property="og:description" content="A virtual CPU, an assembler, and a round-robin kernel written in its assembly. Boot it in the browser, single-step the ISA, watch two tasks share one CPU. By Pavan Nallamothu.">
+<meta property="og:url" content="https://pavanchow.github.io/bedrock/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust">
+<meta name="twitter:description" content="A kernel in assembly for an instruction set we own, running on our own emulator. Watch two tasks share one CPU, live.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Bedrock","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","description":"Bedrock is a from-scratch virtual CPU, an assembler and disassembler for its instruction set, and a small operating system kernel written in that assembly. The kernel boots on the emulated machine, installs an interrupt vector table, and time-slices between two user tasks using a timer interrupt and a round-robin scheduler, servicing syscalls through a trap handler.","url":"https://pavanchow.github.io/bedrock/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/bedrock","license":"https://opensource.org/licenses/MIT"}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+</script>
 <style>
   :root {
     --bg: #f5f5f7;
@@ -209,42 +226,111 @@
   .footnote { text-align: center; color: var(--text-dim); font-size: 13px; margin-top: 30px; }
   .footnote a { color: var(--accent); text-decoration: none; }
 </style>
+<style>
+  /* cocoon-grade chrome layered over the playground styles above.
+     Reuses the palette variables from the block above so light and dark agree. */
+  html { scroll-behavior: smooth; }
+  .cwrap { max-width: 820px; margin: 0 auto; padding: 0 28px; }
+  nav.site { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.82);
+    backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--border); }
+  @media (prefers-color-scheme: dark) { nav.site { background: rgba(0,0,0,.72); } }
+  nav.site .row { display: flex; justify-content: space-between; align-items: center; height: 56px;
+    max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+  nav.site .brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 650;
+    letter-spacing: -.01em; color: var(--text); }
+  nav.site .brand .gem { width: 16px; height: 16px; border-radius: 50% 50% 50% 50%/60% 60% 40% 40%;
+    background: linear-gradient(135deg, #5ea0ff, #0071e3); }
+  nav.site .links { display: flex; gap: 24px; align-items: center; }
+  nav.site .links a { color: var(--text); font-size: 14.5px; text-decoration: none; }
+  nav.site .links a:hover { color: var(--accent); }
+  @media (max-width: 640px) { nav.site .links a:not(.gh) { display: none; } }
+
+  .hero { padding: 78px 24px 26px; text-align: center; }
+  .hero img { display: block; margin: 0 auto 8px; }
+  .hero .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin: 0; }
+  .hero h1.big { font-size: clamp(38px, 6.6vw, 62px); line-height: 1.05; letter-spacing: -.035em;
+    font-weight: 700; margin: 16px auto 0; max-width: 15ch; text-wrap: balance; }
+  .hero p.sub { max-width: 680px; margin: 22px auto 0; font-size: clamp(16px, 2vw, 20px);
+    color: var(--text-dim); line-height: 1.6; }
+  .cta-row { display: flex; gap: 13px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
+  .hbtn { display: inline-block; padding: 12px 25px; border-radius: 999px; font-size: 15px;
+    font-weight: 600; border: 1px solid var(--text); color: var(--text); text-decoration: none; }
+  .hbtn:hover { opacity: .75; }
+  .hbtn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  details.co-howto { max-width: 680px; margin: 8px auto 26px; border: 1px solid var(--border);
+    border-radius: 14px; padding: 2px 20px; background: var(--panel-2); }
+  details.co-howto > summary { cursor: pointer; font-weight: 600; font-size: 16px; padding: 15px 0;
+    list-style: none; color: var(--text); }
+  details.co-howto > summary::-webkit-details-marker { display: none; }
+  details.co-howto > summary::before { content: "\25B8"; display: inline-block; margin-right: 9px;
+    color: var(--accent); transition: transform .15s; }
+  details.co-howto[open] > summary::before { transform: rotate(90deg); }
+
+  .stage { max-width: 1120px; margin: 34px auto 0; padding: 0 20px; }
+
+  section.narr { padding: 78px 0; border-top: 1px solid var(--border); }
+  section.narr h2 { font-size: clamp(25px, 4vw, 36px); line-height: 1.12; letter-spacing: -.025em;
+    font-weight: 660; text-align: center; max-width: 760px; margin: 0 auto; color: var(--text); }
+  section.narr p.lead { max-width: 640px; margin: 18px auto 0; text-align: center; color: var(--text-dim);
+    font-size: 16px; line-height: 1.6; }
+  section.narr pre { background: #15161c; color: #ececf4; border-radius: 14px; padding: 20px 22px;
+    font-family: var(--mono); font-size: 13px; line-height: 1.62; overflow-x: auto; max-width: 720px;
+    margin: 28px auto 0; }
+  section.narr pre .cm { color: #8a8d9a; } section.narr pre .g { color: #7fd6a0; }
+  footer.site { padding: 58px 0; border-top: 1px solid var(--border); text-align: center;
+    color: var(--text-dim); }
+  footer.site .name { color: var(--text); font-weight: 600; }
+  footer.site p + p { margin-top: 10px; }
+  footer.site a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 640px) { .hero { padding: 54px 20px 22px; } section.narr { padding: 56px 0; } }
+</style>
 </head>
 <body>
-<div class="wrap">
+<noscript><div style="max-width:820px;margin:0 auto;padding:40px 28px;color:#6e6e73">Bedrock is a from-scratch virtual CPU, an assembler for its instruction set, and a small operating system kernel written in that assembly, by Pavan Nallamothu. The kernel boots on the emulated machine, installs an interrupt vector table, and time-slices between two user tasks with a timer interrupt and a round-robin scheduler. Source: <a href="https://github.com/pavanchow/bedrock">github.com/pavanchow/bedrock</a>.</div></noscript>
 
-  <header class="hero">
-    <img src="logo.svg" alt="Bedrock logo" width="72" height="72" style="display:block;margin:0 auto 10px">
-    <h1>Bedrock</h1>
-    <p class="tag">A from-scratch virtual CPU, assembler, and preemptive kernel — running live in your browser.</p>
-    <a class="repo" href="https://github.com/pavanchow/bedrock" target="_blank" rel="noopener">View the Rust engine on GitHub ↗</a>
-  </header>
+<nav class="site"><div class="row">
+  <div class="brand"><span class="gem"></span>Bedrock</div>
+  <div class="links"><a href="#sim">Playground</a><a href="#how">How it works</a><a href="#use">Use it</a><a class="gh" href="https://github.com/pavanchow/bedrock">GitHub</a></div>
+</div></nav>
 
-  <div class="card">
-    <details class="howto">
+<div class="hero">
+  <img src="logo.svg" alt="Bedrock logo" width="72" height="72">
+  <p class="eyebrow">Rust · CPU, assembler, kernel</p>
+  <h1 class="big">Watch two tasks<br>share one CPU.</h1>
+  <p class="sub">Bedrock is a from-scratch virtual CPU, an assembler for its instruction set, and a small operating system kernel written in that assembly. This page runs the exact kernel the Rust CLI runs: it assembles the source, boots on the emulated machine, installs an interrupt vector table, and time-slices between two user tasks with a timer interrupt and a round-robin scheduler. Step it one instruction at a time and watch the registers, flags, mode, memory, and console change.</p>
+  <div class="cta-row">
+    <a class="hbtn primary" href="#sim">Boot the machine</a>
+    <a class="hbtn" href="https://github.com/pavanchow/bedrock">View on GitHub</a>
+  </div>
+</div>
+
+    <details class="co-howto">
       <summary>How to use this playground</summary>
       <div class="howto-body">
-        <p class="lead">This page reimplements Bedrock's instruction set and runs the exact same kernel source the Rust CLI runs. Everything below is computed live in JavaScript — the same ISA, the same two-task round-robin scheduler, the same output.</p>
+        <p class="lead">This page reimplements Bedrock's instruction set and runs the exact same kernel source the Rust CLI runs. Everything below is computed live in JavaScript: the same ISA, the same two-task round-robin scheduler, the same output.</p>
 
         <h3>The controls</h3>
         <ul>
-          <li><code class="inl">Step</code> — execute exactly one thing: one instruction, or the delivery of one pending timer interrupt. Watch the highlighted source line, the registers, and the mode badge change.</li>
-          <li><code class="inl">Run</code> / <code class="inl">Pause</code> — auto-step at the speed set by the slider. Great for watching the two tasks trade places.</li>
-          <li><code class="inl">Run to completion</code> — execute at full speed until the machine halts (both tasks have exited), then draw the whole run.</li>
-          <li><code class="inl">Reset</code> — reassemble the kernel and return the machine to its power-on state.</li>
-          <li><code class="inl">Timer period</code> — how many retired instructions between timer interrupts (the Rust default is 80). Lower it to preempt more aggressively. Changing it resets the machine.</li>
+          <li><code class="inl">Step</code>: execute exactly one thing, one instruction, or the delivery of one pending timer interrupt. Watch the highlighted source line, the registers, and the mode badge change.</li>
+          <li><code class="inl">Run</code> / <code class="inl">Pause</code>: auto-step at the speed set by the slider. Great for watching the two tasks trade places.</li>
+          <li><code class="inl">Run to completion</code>: execute at full speed until the machine halts (both tasks have exited), then draw the whole run.</li>
+          <li><code class="inl">Reset</code>: reassemble the kernel and return the machine to its power-on state.</li>
+          <li><code class="inl">Timer period</code>: how many retired instructions between timer interrupts (the Rust default is 80). Lower it to preempt more aggressively. Changing it resets the machine.</li>
         </ul>
 
         <h3>What you are looking at</h3>
         <ul>
-          <li><b>Registers</b> r0–r7 plus pc and sp. A register lights up the step it changes.</li>
+          <li><b>Registers</b> r0 to r7 plus pc and sp. A register lights up the step it changes.</li>
           <li><b>Flags</b> Z, C, S, O (zero, carry, sign, overflow), I (interrupt-enable) and the <b>mode</b> badge (user vs kernel). Privileged instructions only run in kernel mode.</li>
           <li><b>Timer</b> a countdown bar to the next timer interrupt. It only ticks while interrupts are enabled, so it freezes inside a handler.</li>
           <li><b>Kernel source</b> the real <code class="inl">kernel/kernel.asm</code>; the line at the program counter is highlighted as it runs.</li>
           <li><b>Current instruction</b> the decoded instruction at the pc (round-tripped through the disassembler).</li>
           <li><b>Memory</b> a live hex view of the image; the pc byte is boxed in blue, the stack pointer in green.</li>
           <li><b>Vector table</b> the three interrupt vectors (timer, syscall, fault); the one that just fired glows.</li>
-          <li><b>Console</b> bytes the tasks print via the print syscall — task 0 prints <code class="inl">A</code>, task 1 prints <code class="inl">B</code>.</li>
+          <li><b>Console</b> bytes the tasks print via the print syscall: task 0 prints <code class="inl">A</code>, task 1 prints <code class="inl">B</code>.</li>
           <li><b>Task timeline</b> one colored tick per step showing which task (or the kernel) held the CPU. The interleaving of blue and green is preemptive multitasking made visible.</li>
           <li><b>Event log</b> every timer interrupt, trap, fault, and context switch, in order.</li>
         </ul>
@@ -252,15 +338,15 @@
         <h3>A guided tour (about a minute)</h3>
         <ol>
           <li>Press <code class="inl">Step</code> a few times. Boot runs in kernel mode: it sets the stack, installs the vector table with <code class="inl">lidt</code>, then hand-builds a saved stack frame for each task.</li>
-          <li>Keep stepping to the final <code class="inl">iret</code> of boot — the mode badge flips to <b>user</b> and you land in <code class="inl">task0_entry</code>. Task 0 prints its first <code class="inl">A</code> with <code class="inl">trap SYS_PRINT</code>.</li>
+          <li>Keep stepping to the final <code class="inl">iret</code> of boot, the mode badge flips to <b>user</b> and you land in <code class="inl">task0_entry</code>. Task 0 prints its first <code class="inl">A</code> with <code class="inl">trap SYS_PRINT</code>.</li>
           <li>Watch the timer bar drain. When it hits zero the timer fires: the vector table's row 0 glows, mode flips to <b>kernel</b>, and <code class="inl">timer_handler</code> saves the task's registers and switches to task 1. Now you see <code class="inl">B</code> appear.</li>
-          <li>Press <code class="inl">Run</code> and watch the timeline fill with alternating blue and green — the two tasks time-slicing. When each task has printed its letter six times it calls <code class="inl">trap SYS_EXIT</code>; when both are gone the scheduler executes <code class="inl">halt</code>.</li>
+          <li>Press <code class="inl">Run</code> and watch the timeline fill with alternating blue and green, the two tasks time-slicing. When each task has printed its letter six times it calls <code class="inl">trap SYS_EXIT</code>; when both are gone the scheduler executes <code class="inl">halt</code>.</li>
           <li>Or just press <code class="inl">Run to completion</code>: the console should read <code class="inl">ABBABABABABA</code>, matching the Rust engine byte-for-byte.</li>
         </ol>
       </div>
     </details>
-  </div>
 
+  <div class="stage" id="sim">
   <div class="card">
     <h2>The machine <span class="sub" id="verifyline">assembling…</span></h2>
     <div class="controls" style="margin-bottom:16px">
@@ -286,7 +372,7 @@
     <div class="grid" style="margin-top:20px">
       <div>
         <div class="subcard">
-          <h3>Kernel source — kernel/kernel.asm</h3>
+          <h3>Kernel source: kernel/kernel.asm</h3>
           <div class="source" id="sourceView"></div>
         </div>
         <div class="subcard">
@@ -312,13 +398,13 @@
 
         <div class="subcard">
           <h3>Timer countdown</h3>
-          <div id="timerText" style="font-family:var(--mono);font-size:13px;color:var(--text-dim)">—</div>
+          <div id="timerText" style="font-family:var(--mono);font-size:13px;color:var(--text-dim)">…</div>
           <div class="timerbar"><div id="timerFill" style="width:0%"></div></div>
         </div>
 
         <div class="subcard">
           <h3>Current instruction @ pc</h3>
-          <div class="curinstr"><span class="a" id="curAddr">0x0000</span><br><span class="txt" id="curTxt">—</span></div>
+          <div class="curinstr"><span class="a" id="curAddr">0x0000</span><br><span class="txt" id="curTxt">…</span></div>
         </div>
 
         <div class="subcard">
@@ -334,7 +420,7 @@
     </div>
 
     <div class="subcard">
-      <h3>Task timeline — who holds the CPU each step</h3>
+      <h3>Task timeline: who holds the CPU each step</h3>
       <div class="legend">
         <span class="item"><span class="swatch" style="background:var(--taskA)"></span>Task 0 (prints A)</span>
         <span class="item"><span class="swatch" style="background:var(--taskB)"></span>Task 1 (prints B)</span>
@@ -344,22 +430,55 @@
     </div>
 
     <div class="subcard">
-      <h3>Event log — interrupts, traps, faults, context switches</h3>
+      <h3>Event log: interrupts, traps, faults, context switches</h3>
       <div class="log" id="logView"></div>
     </div>
   </div>
+  </div>
 
-  <p class="footnote">
-    Bedrock is real: the CPU decodes real bytes, the assembler emits them from text, and the kernel is an assembly source file.
-    Read the full design in <a href="https://github.com/pavanchow/bedrock" target="_blank" rel="noopener">the repository</a>.
-  </p>
+<section class="narr" id="how"><div class="cwrap">
+  <h2>Deterministic, down to the last cycle</h2>
+  <p class="lead">This page reimplements the same instruction set, assembler, and two-task round-robin scheduler the Rust engine ships, and runs the exact <code class="inl">kernel/kernel.asm</code> source. On load it self-checks its output against the Rust engine's ground truth, the value printed next to "The machine" above.</p>
+  <pre><span class="cm"># cargo run --release -- kernel</span>
+ABBABABABABA
+<span class="g">verified vs Rust engine: 2082 cycles, 24 timer irqs, 14 traps, 24 context switches</span>
 
-</div>
+<span class="cm"># the same run every time: same config, identical trace and final state.</span>
+<span class="cm"># task 0 prints A, task 1 prints B, preempted by the timer between them.</span></pre>
+  <p class="lead" style="margin-top:26px">Because Bedrock owns the whole machine, its registers, flags, memory, and instruction set, every claim about scheduling, interrupts, privilege levels, and determinism is asserted directly against observed state. A load or store out of the 64 KiB, a bad opcode, a privileged instruction in user mode, and a divide by zero all resolve to a clean guest fault instead of touching the host.</p>
+</div></section>
+
+<section class="narr" id="use"><div class="cwrap">
+  <h2>Use it</h2>
+  <pre><span class="cm"># build the emulator, assembler, and bundled kernel</span>
+cargo build --release
+
+<span class="cm"># boot the bundled kernel: two tasks time-sliced by the timer</span>
+cargo run --release -- kernel
+
+<span class="cm"># trace it step by step (mode, task, and event per instruction)</span>
+cargo run --release -- kernel --trace
+
+<span class="cm"># assemble and run your own program, with a trace and a timer</span>
+cargo run --release -- run path/to/program.asm --trace --timer 50
+
+<span class="cm"># assemble to hex, or disassemble</span>
+cargo run --release -- asm    path/to/program.asm
+cargo run --release -- disasm path/to/program.asm
+
+<span class="cm"># the correctness gate: instruction semantics, interrupts, kernel, fuzzing</span>
+cargo test</pre>
+</div></section>
+
+<footer class="site"><div class="cwrap">
+  <p>Bedrock is MIT licensed. Source, tests, and the design notes are on <a href="https://github.com/pavanchow/bedrock">GitHub</a>.</p>
+  <p>By <span class="name">Pavan Nallamothu</span>.</p>
+</div></footer>
 
 <script>
 "use strict";
 /* ------------------------------------------------------------------ *
- * Bedrock ISA, assembler, and CPU — a faithful JS port of the Rust
+ * Bedrock ISA, assembler, and CPU, a faithful JS port of the Rust
  * engine in src/. Semantics match src/isa.rs, src/cpu.rs, src/assembler.rs
  * and the bundled kernel/kernel.asm.
  * ------------------------------------------------------------------ */
@@ -1203,12 +1322,12 @@ function render() {
     $("timerText").textContent = `${remaining} instruction(s) to next timer interrupt`;
   } else {
     $("timerFill").style.width = "0%";
-    $("timerText").textContent = cpu.flags.ie ? "timer disabled" : "interrupts masked (inside handler) — timer frozen";
+    $("timerText").textContent = cpu.flags.ie ? "timer disabled" : "interrupts masked (inside handler), timer frozen";
   }
 
   // current instruction
   const inb = cpu.pc + 8 <= MEM_SIZE;
-  let curTxt = "—";
+  let curTxt = "…";
   if (inb) { const d = decode(cpu.mem.subarray(cpu.pc, cpu.pc + 8)); curTxt = d ? disasmInstr(d) : ".word (data)"; }
   $("curAddr").textContent = hex(cpu.pc, 4) + (cpu.halted ? "  (halted)" : "");
   $("curTxt").textContent = curTxt;
