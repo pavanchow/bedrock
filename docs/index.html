@@ -6,6 +6,7 @@
 <title>Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust</title>
 <meta name="description" content="Bedrock by Pavan Nallamothu: a virtual CPU, an assembler for its instruction set, and a small operating system kernel written in that assembly. Boot the kernel in your browser, single-step the ISA, and watch two user tasks time-slice on a timer interrupt.">
 <meta name="author" content="Pavan Nallamothu (pavanchow)">
+<meta name="keywords" content="virtual CPU, CPU emulator, assembler, disassembler, instruction set architecture, ISA, operating system kernel, preemptive scheduler, round-robin scheduler, interrupt vector table, timer interrupt, context switch, trap, syscall, user mode, kernel mode, privilege levels, Rust, teaching VM, from scratch, Pavan Nallamothu, pavanchow">
 <link rel="canonical" href="https://pavanchow.github.io/bedrock/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="author" href="https://github.com/pavanchow">
@@ -17,7 +18,7 @@
 <meta name="twitter:title" content="Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust">
 <meta name="twitter:description" content="A kernel in assembly for an instruction set we own, running on our own emulator. Watch two tasks share one CPU, live.">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Bedrock","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","description":"Bedrock is a from-scratch virtual CPU, an assembler and disassembler for its instruction set, and a small operating system kernel written in that assembly. The kernel boots on the emulated machine, installs an interrupt vector table, and time-slices between two user tasks using a timer interrupt and a round-robin scheduler, servicing syscalls through a trap handler.","url":"https://pavanchow.github.io/bedrock/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/bedrock","license":"https://opensource.org/licenses/MIT"}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Bedrock","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","softwareVersion":"0.1.0","description":"Bedrock is a from-scratch virtual CPU, an assembler and disassembler for its instruction set, and a small operating system kernel written in that assembly. The kernel boots on the emulated machine, installs an interrupt vector table, and time-slices between two user tasks using a timer interrupt and a round-robin scheduler, servicing syscalls through a trap handler.","url":"https://pavanchow.github.io/bedrock/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/bedrock","license":"https://opensource.org/licenses/MIT"}
 </script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
@@ -286,6 +287,29 @@
   footer.site p + p { margin-top: 10px; }
   footer.site a { color: var(--accent); text-decoration: none; }
   @media (max-width: 640px) { .hero { padding: 54px 20px 22px; } section.narr { padding: 56px 0; } }
+
+  nav.site .v { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+  section.narr .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); text-align: center; margin: 0; }
+  .rows { max-width: 760px; margin: 40px auto 0; }
+  .rows .r { display: grid; grid-template-columns: minmax(150px,1fr) 2fr; gap: 12px 34px;
+    padding: 22px 0; border-top: 1px solid var(--border); text-align: left; }
+  .rows .r:first-child { border-top: none; }
+  .rows .r b { font-size: 17px; color: var(--text); }
+  .rows .r p { color: var(--text-dim); margin: 0; font-size: 15px; line-height: 1.6; }
+  .rows .r code { font-family: var(--mono); font-size: 13px; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
+  @media (max-width: 640px) { .rows .r { grid-template-columns: 1fr; gap: 5px; } }
+  .pgrid { display: grid; grid-template-columns: repeat(2,1fr); gap: 15px; max-width: 860px;
+    margin: 44px auto 0; text-align: left; }
+  @media (max-width: 640px) { .pgrid { grid-template-columns: 1fr; } }
+  .pcard { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px 22px; box-shadow: var(--shadow); }
+  .pcard h3 { font-family: var(--mono); font-size: 15px; margin: 0 0 8px; display: flex;
+    align-items: center; gap: 10px; color: var(--text); }
+  .pcard p { color: var(--text-dim); margin: 0; font-size: 14.5px; line-height: 1.58; }
+  .ptag { font-family: var(--mono); font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; padding: 2px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -293,7 +317,7 @@
 
 <nav class="site"><div class="row">
   <div class="brand"><img src="logo.svg" class="brandlogo" alt="" width="22" height="22">Bedrock</div>
-  <div class="links"><a href="#sim">Playground</a><a href="#how">How it works</a><a href="#use">Use it</a><a class="gh" href="https://github.com/pavanchow/bedrock">GitHub</a></div>
+  <div class="links"><a href="#sim">Playground</a><a href="#how">How it works</a><a href="#isa">Instruction set</a><a href="#diff">Design</a><a href="#use">Use it</a><a class="gh" href="https://github.com/pavanchow/bedrock">GitHub</a><span class="v">v0.1.0</span></div>
 </div></nav>
 
 <div class="hero">
@@ -448,8 +472,40 @@ ABBABABABABA
   <p class="lead" style="margin-top:26px">Because Bedrock owns the whole machine, its registers, flags, memory, and instruction set, every claim about scheduling, interrupts, privilege levels, and determinism is asserted directly against observed state. A load or store out of the 64 KiB, a bad opcode, a privileged instruction in user mode, and a divide by zero all resolve to a clean guest fault instead of touching the host.</p>
 </div></section>
 
+<section class="narr" id="isa"><div class="cwrap">
+  <p class="eyebrow">The primitives that matter</p>
+  <h2 style="margin-top:16px">Six mechanisms, and you have a kernel.</h2>
+  <p class="lead">Every one is a real part of the machine you can single-step above, small enough to read in an afternoon.</p>
+  <div class="pgrid">
+    <div class="pcard"><h3><span class="ptag">isa</span> Fixed 8-byte instructions</h3><p>One opcode byte, three register fields, and a 32-bit little-endian immediate. Decoding is trivially bounded, so a malformed stream can never run off the end.</p></div>
+    <div class="pcard"><h3><span class="ptag">interrupts</span> Interrupt vector table</h3><p>lidt installs the timer, syscall, and fault vectors. The timer preempts the running task, and iret restores the interrupted registers, flags, stack pointer, and program counter exactly.</p></div>
+    <div class="pcard"><h3><span class="ptag">privilege</span> User and kernel mode</h3><p>A mode bit in the flags register. Privileged instructions (lidt, sti, cli, iret, halt) run in kernel mode and fault if a user task attempts them.</p></div>
+    <div class="pcard"><h3><span class="ptag">syscall</span> The trap instruction</h3><p>A user task enters kernel mode through the syscall vector to print, yield, or exit. r6 carries the trap number and r1 the argument.</p></div>
+    <div class="pcard"><h3><span class="ptag">scheduler</span> Round-robin, in assembly</h3><p>A suspended task's whole context lives on its own stack as [flags][pc][r0..r7]. A context switch is just save the stack pointer, pick the next runnable task, load its stack pointer, iret.</p></div>
+    <div class="pcard"><h3><span class="ptag">safety</span> Clean faults, then double fault</h3><p>Out-of-bounds memory, a bad opcode, a divide by zero, and a wild stack pointer all raise a clean guest fault. If the fault itself cannot be delivered, the machine raises a double fault and halts instead of recursing.</p></div>
+  </div>
+</div></section>
+
+<section class="narr" id="diff"><div class="cwrap">
+  <h2>The readable version of the whole stack</h2>
+  <p class="lead">Bedrock owns the machine end to end, so nothing is hand-waved and nothing is out of reach of a test.</p>
+  <div class="rows">
+    <div class="r"><b>Teaching VMs and write-your-own-CPU projects</b><p>Usually stop at the CPU and an assembler. Bedrock carries the same idea up through interrupts, privilege levels, and a preemptive scheduler written in the assembly itself.</p></div>
+    <div class="r"><b>The real ISAs it borrows from</b><p>Fixed-width encoding, a flags register, memory-mapped IO, and an interrupt vector table are taken from real hardware and shrunk to the smallest form that still teaches the mechanism.</p></div>
+    <div class="r"><b>QEMU or real hardware</b><p>Boot a real kernel and no unit test can assert what happened inside. Because Bedrock owns the emulated machine, every claim about scheduling, privilege, and determinism is checked directly against observed state.</p></div>
+    <div class="r"><b>Bedrock</b><p>A virtual CPU, an assembler, a disassembler, and a kernel in its own assembly. Small enough to single-step in a browser, strict enough to fuzz in CI, deterministic to the last of its 2082 cycles.</p></div>
+  </div>
+</div></section>
+
 <section class="narr" id="use"><div class="cwrap">
   <h2>Use it</h2>
+  <p class="lead">One binary with four subcommands, a library crate, and the correctness gate.</p>
+  <div class="rows">
+    <div class="r"><b><code>kernel</code></b><p>Boot the bundled kernel: two tasks time-sliced by the timer. Add <code>--trace</code> for the mode, task, and event on every instruction.</p></div>
+    <div class="r"><b><code>run</code></b><p>Assemble and run your own <code>.asm</code> program, with an optional <code>--trace</code> and a <code>--timer</code> period.</p></div>
+    <div class="r"><b><code>asm</code> / <code>disasm</code></b><p>Assemble a source file to hex, or disassemble it back. <code>assemble(disassemble(assemble(x)))</code> reproduces the exact bytes.</p></div>
+    <div class="r"><b>library and tests</b><p>The CPU, assembler, and disassembler are a Rust library crate. <code>cargo test</code> runs instruction semantics, interrupts, kernel behavior, and adversarial fuzzing.</p></div>
+  </div>
   <pre><span class="cm"># build the emulator, assembler, and bundled kernel</span>
 cargo build --release
 
