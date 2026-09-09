@@ -3,25 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust</title>
-<meta name="description" content="Bedrock by Pavan Nallamothu: a virtual CPU, an assembler for its instruction set, and a small operating system kernel written in that assembly. Boot the kernel in your browser, single-step the ISA, and watch two user tasks time-slice on a timer interrupt.">
-<meta name="author" content="Pavan Nallamothu (pavanchow)">
-<meta name="keywords" content="virtual CPU, CPU emulator, assembler, disassembler, instruction set architecture, ISA, operating system kernel, preemptive scheduler, round-robin scheduler, interrupt vector table, timer interrupt, context switch, trap, syscall, user mode, kernel mode, privilege levels, Rust, teaching VM, from scratch, Pavan Nallamothu, pavanchow">
+<title>Bedrock: virtual CPU, assembler and OS kernel in Rust | Pavan Nallamothu</title>
+<meta name="description" content="Bedrock by Pavan Nallamothu: a from-scratch virtual CPU, assembler, and preemptive OS kernel in Rust. Boot the kernel in your browser and single-step the ISA live.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="author" content="Pavan Nallamothu">
+<meta name="keywords" content="bedrock, virtual CPU, CPU emulator, assembler, disassembler, instruction set architecture, ISA, operating system kernel, preemptive scheduler, round-robin scheduler, interrupt vector table, timer interrupt, context switch, syscall, write a kernel from scratch, build a CPU in Rust, bedrock rust, teaching operating system, Pavan Nallamothu, pavanchow">
 <link rel="canonical" href="https://pavanchow.github.io/bedrock/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="author" href="https://github.com/pavanchow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust">
-<meta property="og:description" content="A virtual CPU, an assembler, and a round-robin kernel written in its assembly. Boot it in the browser, single-step the ISA, watch two tasks share one CPU. By Pavan Nallamothu.">
+<meta property="og:site_name" content="Pavan Nallamothu">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="Bedrock: virtual CPU, assembler and OS kernel in Rust | Pavan Nallamothu">
+<meta property="og:description" content="A from-scratch virtual CPU, an assembler, and a preemptive round-robin kernel written in its assembly. Boot it in the browser and single-step the ISA. By Pavan Nallamothu.">
 <meta property="og:url" content="https://pavanchow.github.io/bedrock/">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Bedrock: a from-scratch virtual CPU, assembler, and preemptive kernel in Rust">
-<meta name="twitter:description" content="A kernel in assembly for an instruction set we own, running on our own emulator. Watch two tasks share one CPU, live.">
+<meta property="og:image" content="https://pavanchow.github.io/bedrock/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Bedrock by Pavan Nallamothu">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@pavanchow">
+<meta name="twitter:creator" content="@pavanchow">
+<meta name="twitter:title" content="Bedrock: virtual CPU, assembler and OS kernel in Rust | Pavan Nallamothu">
+<meta name="twitter:description" content="A from-scratch virtual CPU, an assembler, and a preemptive round-robin kernel written in its assembly. Boot it in the browser and single-step the ISA.">
+<meta name="twitter:image" content="https://pavanchow.github.io/bedrock/og-image.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Bedrock","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","softwareVersion":"0.1.0","description":"Bedrock is a from-scratch virtual CPU, an assembler and disassembler for its instruction set, and a small operating system kernel written in that assembly. The kernel boots on the emulated machine, installs an interrupt vector table, and time-slices between two user tasks using a timer interrupt and a round-robin scheduler, servicing syscalls through a trap handler.","url":"https://pavanchow.github.io/bedrock/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/bedrock","license":"https://opensource.org/licenses/MIT"}
-</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://pavanchow.github.io/bedrock/#app","name":"Bedrock","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","softwareVersion":"0.1.0","description":"Bedrock is a from-scratch virtual CPU, an assembler and disassembler for its instruction set, and a small operating system kernel written in that assembly. The kernel boots on the emulated machine, installs an interrupt vector table, and time-slices between two user tasks using a timer interrupt and a round-robin scheduler, servicing syscalls through a trap handler.","url":"https://pavanchow.github.io/bedrock/","image":"https://pavanchow.github.io/bedrock/og-image.png","programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/bedrock","license":"https://opensource.org/licenses/MIT","datePublished":"2026-08-21","keywords":"virtual CPU, assembler, disassembler, instruction set architecture, operating system kernel, preemptive scheduler, round-robin scheduler, interrupt vector table, timer interrupt, syscall, Rust","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Virtual CPU with a custom instruction set architecture","Assembler and disassembler for the ISA","Preemptive round-robin scheduler","Timer interrupt and interrupt vector table","Trap handler for syscalls","Browser playground that single-steps the ISA"],"author":{"@id":"https://github.com/pavanchow#person"},"publisher":{"@id":"https://github.com/pavanchow#person"}},{"@type":"Person","@id":"https://github.com/pavanchow#person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","jobTitle":"Software Engineer and Security Researcher","knowsAbout":["Rust","operating systems","CPU emulation","assemblers","instruction set architecture","schedulers","interrupts","compilers"],"sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]},{"@type":"WebSite","name":"Bedrock by Pavan Nallamothu","url":"https://pavanchow.github.io/bedrock/","author":{"@id":"https://github.com/pavanchow#person"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Pavan Nallamothu","item":"https://github.com/pavanchow"},{"@type":"ListItem","position":2,"name":"Bedrock","item":"https://pavanchow.github.io/bedrock/"}]},{"@type":"WebPage","url":"https://pavanchow.github.io/bedrock/","name":"Bedrock: virtual CPU, assembler and OS kernel in Rust | Pavan Nallamothu","isPartOf":{"@type":"WebSite","url":"https://pavanchow.github.io/bedrock/"},"about":{"@id":"https://pavanchow.github.io/bedrock/#app"},"author":{"@id":"https://github.com/pavanchow#person"},"inLanguage":"en"}]}
 </script>
 <style>
   :root {
@@ -529,6 +536,18 @@ cargo test</pre>
 <footer class="site"><div class="cwrap">
   <p>Bedrock is MIT licensed. Source, tests, and the design notes are on <a href="https://github.com/pavanchow/bedrock">GitHub</a>.</p>
   <p>By <span class="name">Pavan Nallamothu</span>.</p>
+  <nav class="more-tools" aria-label="More open-source tools by Pavan Nallamothu">
+    <p class="more-tools-title">More open-source tools by Pavan Nallamothu</p>
+    <p>
+      <a href="https://pavanchow.github.io/chronos/">Chronos, a CPU scheduler in Rust</a> ·
+      <a href="https://pavanchow.github.io/cocoon/">Cocoon, a rootless Linux container runtime</a> ·
+      <a href="https://pavanchow.github.io/strata/">Strata, a file system in Rust</a> ·
+      <a href="https://pavanchow.github.io/anvil/">Anvil, a compiler backend with register allocation</a> ·
+      <a href="https://pavanchow.github.io/ignition/">Ignition, a boot sequence simulator</a> ·
+      <a href="https://pavanchow.github.io/keystone/">Keystone, an LSM-tree key-value store</a> ·
+      <a href="https://github.com/pavanchow">All projects on GitHub</a>
+    </p>
+  </nav>
 </div></footer>
 
 <script>
