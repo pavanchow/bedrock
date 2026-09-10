@@ -12,6 +12,8 @@ actually work.
 
 **[Live demo](https://pavanchow.github.io/bedrock/)** · MIT licensed · pure Rust
 
+Built from scratch by [Pavan Nallamothu](https://pavanchow.github.io/) ([LinkedIn](https://www.linkedin.com/in/pavanchow/), [GitHub](https://github.com/pavanchow)).
+
 ## The honest framing
 
 A real bootable kernel written in machine assembly cannot be exercised by
